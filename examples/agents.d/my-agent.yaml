@@ -1,0 +1,15 @@
+# ~/.config/ohmypm/agents.d/my-agent.yaml — a custom CLI agent (must be listed in trusted_custom_agents)
+id: my-agent
+name: My Agent
+executable: /usr/local/bin/my-agent         # absolute path; never run through a shell
+args: ["--non-interactive", "--cwd", "{workspace}"]
+# placeholders (whole-argument only): {workspace} {run_id} {task_id} {prompt} {prompt_file}
+version_args: ["--version"]                 # availability check; [] = just check the file is executable
+prompt_delivery: stdin                      # stdin | arg | file
+output:
+  format: jsonl                             # jsonl: {"type": "agent.message", "text": "..."} per line; text: plain lines
+runtime:
+  timeout_seconds: 3600
+  max_parallel: 1
+env:
+  MY_AGENT_MODE: batch

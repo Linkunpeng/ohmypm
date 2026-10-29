@@ -1,0 +1,63 @@
+[project]
+name = "ohmypm-workspace"
+version = "0.1.0"
+description = "ohmypm development workspace (not published)"
+requires-python = ">=3.12"
+dependencies = [
+    "ohmypm-common",
+    "ohmypm-server",
+    "ohmypm-runner",
+    "ohmypm-cli",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["common", "backend", "runner", "cli"]
+
+[tool.uv.sources]
+ohmypm-common = { workspace = true }
+ohmypm-server = { workspace = true }
+ohmypm-runner = { workspace = true }
+ohmypm-cli = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "types-PyYAML",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "-ra"
+markers = [
+    "smoke: optional tests that call real agent CLIs (cost money); enable with OHMYPM_SMOKE=1",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "S", "RUF"]
+ignore = ["S101", "S603", "S607", "RUF001", "RUF002", "RUF003", "B008", "RUF012", "UP046", "UP047"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "ASYNC"]
+"backend/ohmypm/migrations/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ohmypm", "ohmypm_common", "ohmypm_runner", "ohmypm_cli", "tests"]

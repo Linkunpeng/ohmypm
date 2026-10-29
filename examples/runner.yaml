@@ -1,0 +1,25 @@
+# ~/.config/ohmypm/runner.yaml — ohmypm Agent Runner configuration
+server_url: http://127.0.0.1:8765
+# token: <OHMYPM_RUNNER_TOKEN>      # prefer the OHMYPM_RUNNER_TOKEN environment variable
+name: workstation
+# host_id defaults to the hostname; it must match the host_id the CLI records for workspaces
+allowed_roots:                      # agents only run in workspaces whose real path is below one of these
+  - ~/workspace
+max_parallel: 2
+allow_dangerous: false              # true permits bypassPermissions / danger-full-access / pi bash profiles
+enable_fake_agent: false
+agents:
+  claude:
+    enabled: true
+    # executable: /home/me/.local/bin/claude
+    max_parallel: 2
+  codex:
+    enabled: true
+    # env: {CODEX_HOME: /home/me/.codex}   # extra env for this agent (no ~ expansion)
+  pi:
+    enabled: true
+  dsh:
+    enabled: false
+trusted_custom_agents:
+  - my-agent                        # ids of agents.d/*.yaml definitions you authorize
+cancel_grace_seconds: 10
