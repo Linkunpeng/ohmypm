@@ -42,3 +42,17 @@ Robust across processes, no LISTEN/NOTIFY dependency. Frontend uses fetch-stream
 
 ## D-009 Backend serves the built Web UI
 Single container (multi-stage build) serves `/api`, `/mcp`, and the SPA. Vite dev server proxies in dev.
+
+## D-010 Reusable agents extend existing profiles
+Model a named agent's description, instructions and execution defaults as an agent profile, retaining
+the existing runner trust boundary and whitelisted options. Snapshot the instructions with the options
+at dispatch so profile edits or deletion cannot change queued or historical runs. Run instructions
+remain separate. Multica's multi-user access and runtime models are not implicitly mapped to the
+single-user deployment.
+
+## D-011 Explicit native session continuation
+Continue from a specific run by preserving its session, runner, workspace and profile snapshot. Serialize
+queued and active runs per reused session using a session row lock. Fail explicitly when no native session
+exists or an adapter reports a different one; do not silently start over. Resume turns send incremental
+instructions rather than rebuilding the full platform context. Cross-agent handoff remains a new session
+using checkpoint context. Runner IDs must persist across restarts for queued continuations to resume.

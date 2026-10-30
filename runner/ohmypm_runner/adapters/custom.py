@@ -175,6 +175,7 @@ class FakeAdapter(BaseAdapter):
     agent_type = "fake"
     display_name = "Fake agent (testing)"
     default_executable = sys.executable
+    supports_native_resume = True
 
     def executable(self) -> str | None:
         return sys.executable
@@ -195,6 +196,8 @@ class FakeAdapter(BaseAdapter):
         env = self.base_env(ctx)
         env["OHMYPM_FAKE_SCRIPT"] = json.dumps(ctx.options.script)
         env["OHMYPM_FAKE_EXIT_CODE"] = str(ctx.options.exit_code)
+        if ctx.resume_native and ctx.native_session_id:
+            env["OHMYPM_FAKE_SESSION_ID"] = ctx.native_session_id
         argv = [sys.executable, "-m", "ohmypm_runner.fake_agent"]
         return LaunchSpec(
             argv=argv,

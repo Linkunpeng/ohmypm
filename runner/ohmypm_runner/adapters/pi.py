@@ -37,6 +37,7 @@ def _text_of(message: dict[str, Any]) -> str:
 
 
 class PiAdapter(BaseAdapter):
+    supports_native_resume = True
     agent_type = "pi"
     display_name = "Pi"
     default_executable = "pi"
@@ -98,6 +99,8 @@ class PiAdapter(BaseAdapter):
                 state.usage = {
                     "input": usage.get("input"),
                     "output": usage.get("output"),
+                    "cache_read_tokens": usage.get("cacheRead"),
+                    "cache_write_tokens": usage.get("cacheWrite"),
                     "cost": (usage.get("cost") or {}).get("total"),
                 }
             if message.get("stopReason") == "error":

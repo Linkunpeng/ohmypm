@@ -613,6 +613,7 @@ def build_mcp(db: Database, settings: Settings) -> FastMCP:
         instructions: str = "",
         workspace_id: str | None = None,
         idempotency_key: str | None = None,
+        continue_run_id: str | None = None,
     ) -> dict[str, Any]:
         """Queue an agent run for a task. Agents may only dispatch within the configured depth limit."""
         data = RunCreate.model_validate(
@@ -622,6 +623,7 @@ def build_mcp(db: Database, settings: Settings) -> FastMCP:
                 "profile_name": profile_name,
                 "instructions": instructions,
                 "workspace_id": workspace_id,
+                "continue_run_id": continue_run_id,
             }
         )
 

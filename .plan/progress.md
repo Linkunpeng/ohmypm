@@ -52,3 +52,35 @@ Manual verification (2026-10-29, this machine):
 - PyPI is slow here: `UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple uv sync`. `uv.lock` was
   rewritten to canonical pypi.org/files.pythonhosted.org URLs (same hashes; `uv lock --check` OK).
 - Host has unrelated postgres on :5432; ohmypm compose uses :55432; dev scratch cluster :55433.
+
+## 2026-10-30 — Multica agent core adaptation
+
+- Compared Multica's agent configuration and runtime model with ohmypm's existing profiles and runner.
+- Added reusable agent instructions, profile editing (including name), and dispatch-time instruction snapshots;
+  updated Web creation/editing, CLI creation and runner documentation. Dispatch UI now respects profile
+  write scheduling defaults. Migration `0002` adds the instructions column.
+- Verified in an isolated PostgreSQL container: `pytest -q` 65 passed, 4 real-CLI smoke tests skipped;
+  ruff and mypy passed; frontend typecheck, 6 tests, lint (three existing shadcn warnings), and build passed.
+- First DB-backed attempt failed because inherited SOCKS proxy settings affected local HTTP and the health
+  test expected revision 0001. Unsetting proxy variables and updating the assertion resolved the failures.
+- Multica's agent chat/builder, per-user invocation permissions, skills/MCP configuration, runtime binding,
+  and additional CLI adapters have not been ported. Actual CLI execution for the new instructions was not
+  smoke-tested; the runner claim prompt and snapshot were integration-tested with a fake runtime.
+
+## 2026-10-30 — Remote runner continuation
+
+- Added explicit `continue_run_id` for Web, REST, MCP and CLI: continuation retains the source session,
+  runner, workspace and profile snapshot, rejects stale/missing sessions, and serializes competing runs
+  through a session row lock. The original runner must reconnect to claim a queued continuation.
+- Resume prompts carry the new instruction instead of rebuilding full platform context. The runner rejects
+  unsupported resume adapters and stops if a CLI reports a different native session ID. Run details expose
+  provider-reported usage; Pi cache read/write fields are retained.
+- Added a mobile navigation drawer, a scrollable dispatch dialog, and remote access documentation.
+- Verified with isolated PostgreSQL: 68 passed, 4 opt-in real-CLI smoke tests skipped; targeted adapter tests
+  15 passed; ruff, mypy, frontend typecheck, 7 tests, lint (3 existing shadcn warnings), and build passed.
+  Tests include concurrent resume, runner pinning, compact prompts and changed native IDs using fake agents.
+- Test development: restarting the same stopped RunnerService left the test run queued; constructing a new
+  service with the same persistent runner ID fixed the test. Mobile component test needed a theme mock for
+  jsdom's missing matchMedia; final test passes.
+- Not verified: real CLI session resume, actual provider cache hit/latency, mobile browser over a real HTTPS
+  endpoint. No native mobile app, interactive permission relay, or live in-turn message steering exists.

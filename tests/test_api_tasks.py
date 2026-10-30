@@ -13,7 +13,7 @@ async def test_health_is_public(clients: Clients) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["database"] == "ok"
-    assert body["schema_revision"] == "0001"
+    assert body["schema_revision"] == "0002"
 
 
 async def test_auth_required(clients: Clients) -> None:

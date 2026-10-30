@@ -151,7 +151,7 @@ def test_pi_success_and_tools(tmp_path: Path) -> None:
                 "role": "assistant",
                 "content": [{"type": "text", "text": "All done"}],
                 "stopReason": "stop",
-                "usage": {"input": 5, "output": 2},
+                "usage": {"input": 5, "output": 2, "cacheRead": 100, "cacheWrite": 20},
             },
         },
     ]
@@ -164,6 +164,8 @@ def test_pi_success_and_tools(tmp_path: Path) -> None:
         "agent.message",
     ]
     assert adapter.finalize(state, 0).status is RunStatus.COMPLETED
+    assert state.usage["cache_read_tokens"] == 100
+    assert state.usage["cache_write_tokens"] == 20
 
 
 def test_pi_argv_defaults_exclude_bash(tmp_path: Path) -> None:

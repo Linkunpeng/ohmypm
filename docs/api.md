@@ -46,7 +46,7 @@ Interactive docs: `http://127.0.0.1:8765/api/docs` (OpenAPI JSON at `/api/openap
 | `POST /api/decisions/{id}/cancel` | Dismiss |
 | `POST/GET /api/knowledge`, `GET/PATCH /api/knowledge/{id}` | Knowledge (`superseded_by` to retire) |
 | `POST/GET /api/artifacts`, `GET/PATCH /api/artifacts/{id}` | Artifacts (detail includes versions) |
-| `POST /api/runs` | Dispatch: `{task_id, agent_type | profile_id | profile_name, workspace_id, instructions, context_mode, session_id, resume_native, from_checkpoint_id, timeout_seconds, write_mode, force}` |
+| `POST /api/runs` | Dispatch: `{task_id, agent_type | profile_id | profile_name, workspace_id, instructions, context_mode, session_id, resume_native, continue_run_id, from_checkpoint_id, timeout_seconds, write_mode, force}` |
 | `GET /api/runs`, `GET /api/runs/{id}` | `?task_id=&project_id=&status=&active=` |
 | `POST /api/runs/{id}/cancel` | Queued → cancelled immediately; active → cancel requested |
 | `GET /api/runs/{id}/events` | JSON (`?after_seq=&event_type=`) or **SSE** with `Accept: text/event-stream` |

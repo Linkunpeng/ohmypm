@@ -18,6 +18,10 @@ curl -s http://127.0.0.1:8765/api/health
 - Ports are bound to `127.0.0.1` (`OHMYPM_HOST_PORT`, `OHMYPM_DB_PORT` in `.env`). To reach the server from
   other machines (remote runners), put it behind a TLS reverse proxy and set `OHMYPM_PUBLIC_URL` to the
   public URL. Never publish PostgreSQL.
+- For remote use, keep the runner running on the computer that owns the workspace and expose the Web UI
+  through the same authenticated HTTPS endpoint. A phone browser or another computer can queue runs and
+  follow their logs there; this project does not provide a native mobile app. The host must remain online,
+  and the runner must have the agent CLI, credentials, and workspace access configured.
 - Slow PyPI/npm? Set `PYPI_MIRROR=https://pypi.tuna.tsinghua.edu.cn` and/or `NPM_REGISTRY=…` in `.env`
   before `docker compose build`.
 

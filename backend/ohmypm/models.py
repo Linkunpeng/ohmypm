@@ -235,6 +235,7 @@ class AgentProfile(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     agent_type: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, server_default="", default="")
+    instructions: Mapped[str] = mapped_column(Text, nullable=False, server_default="", default="")
     options: Mapped[dict[str, Any]] = _json_obj()
     write_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", default=True)
     timeout_seconds: Mapped[int | None] = mapped_column(Integer)

@@ -72,8 +72,12 @@ Unknown event types are kept as `agent.status`/`agent.output` rather than droppe
 
 ## Agent profiles
 
-Profiles are created on the server (Web → Agent Runner → New profile, `ohmypm agent profile-add`, or
-`POST /api/agent-profiles`) and contain only whitelisted options (`common/ohmypm_common/agent_options.py`):
+Agents are created as profiles on the server (Web → Agent Runner → New agent,
+`ohmypm agent profile-add`, or `POST /api/agent-profiles`). A profile has a name, description,
+reusable instructions, execution defaults, and whitelisted options (`common/ohmypm_common/agent_options.py`).
+Edit and delete profiles in the Agent Runner page or through the API. The chosen profile's options
+and instructions are snapshotted when a run is queued, so later edits or deletion do not change it.
+Run-specific instructions are provided separately and appear alongside the agent instructions.
 
 | Agent | Options |
 |---|---|
@@ -93,10 +97,28 @@ ohmypm agent profile-add claude-default --agent claude --default \
   --options '{"model": "sonnet", "allowed_tools": ["Bash(npm test:*)", "Bash(git diff:*)"], "max_budget_usd": 5}'
 ohmypm agent profile-add codex-default --agent codex --default --options '{"sandbox": "workspace-write"}'
 ohmypm agent profile-add claude-review --agent claude --read-only --options '{"permission_mode": "plan"}'
+ohmypm agent profile-add reviewer --agent codex --read-only --options '{"sandbox":"read-only"}' \
+  --instructions 'Review changes for correctness.'
 ```
 
 Read-only profiles (`write_mode=false`) may run concurrently with a writer in the same workspace;
-write runs are serialized per workspace.
+write runs are serialized per workspace. This flag controls queue scheduling, not filesystem permissions;
+configure the CLI's own read-only sandbox or permissions separately.
+
+## Continuing a native session
+
+From a finished run, use **Continue with** in the Web UI and enter the next instruction. Alternatively,
+run `ohmypm run dispatch T-1 --continue-run <run-id> -i 'next instruction'`, or pass
+`continue_run_id` to `POST /api/runs` / MCP `pm_dispatch_task`. A continuation retains the original
+workspace, runner, session and profile snapshot. Only one queued or active run may use a session at once.
+If its original runner is offline, the continuation waits for that runner to reconnect.
+
+The runner starts a new CLI process and requests native session resume; it does not keep a live interactive
+process between turns. It sends the new instruction without rebuilding the full platform context. If no
+native session was recorded, continuation is rejected. If an adapter reports a different session ID, the
+runner stops the run and reports `resume_mismatch`. Native resume support and error reporting depend on
+the CLI; custom adapters do not support it. A successful request is not proof of a provider cache hit.
+The run detail shows provider usage when reported; availability and field names vary by agent.
 
 ## Custom CLIs
 

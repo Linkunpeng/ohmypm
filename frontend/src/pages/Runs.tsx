@@ -153,7 +153,7 @@ export function Runs() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Agent profiles</CardTitle>
+            <CardTitle className="text-base">Agents</CardTitle>
             <ProfileDialog />
           </CardHeader>
           <CardContent className="space-y-2">
@@ -166,9 +166,11 @@ export function Runs() {
                     {p.is_default && <Badge className="ml-2">default</Badge>}
                     {!p.write_mode && <Badge variant="outline" className="ml-2">read-only</Badge>}
                   </div>
+                  {p.description && <p className="mt-1 text-muted-foreground">{p.description}</p>}
                   <pre className="mt-1 overflow-auto text-xs text-muted-foreground">{JSON.stringify(p.options)}</pre>
                 </div>
-                <Button size="xs" variant="ghost" onClick={() => deleteProfile.mutate(p.id)}>
+                <ProfileDialog key={`${p.id}-${p.version}`} profile={p} />
+                <Button size="xs" variant="ghost" disabled={deleteProfile.isPending} onClick={() => { if (window.confirm(`Delete agent ${p.name}?`)) deleteProfile.mutate(p.id) }}>
                   Delete
                 </Button>
               </div>
@@ -243,6 +245,7 @@ export function RunView() {
                 <DispatchDialog
                   task={task.data}
                   defaultAgent={r.agent_type}
+                  continueRun={r}
                   trigger={<Button size="sm">Continue with {r.agent_type}</Button>}
                 />
               </>
@@ -268,6 +271,7 @@ export function RunView() {
                   ['Exit code', r.exit_code ?? '—'],
                   ['PID', r.pid ?? '—'],
                   ['Native session', r.native_session_id ? <Mono key="n">{r.native_session_id}</Mono> : '—'],
+                  ['Session mode', r.resume_native ? 'Native resume requested' : 'New session'],
                   ['Timeout', `${r.timeout_seconds}s`],
                 ]}
               />
@@ -287,6 +291,12 @@ export function RunView() {
                 <CardTitle className="text-sm">Agent's final message</CardTitle>
               </CardHeader>
               <CardContent className="max-h-80 overflow-auto text-sm whitespace-pre-wrap">{r.result_summary}</CardContent>
+            </Card>
+          )}
+          {Object.keys(r.usage).length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Provider usage</CardTitle></CardHeader>
+              <CardContent><pre className="overflow-auto text-xs">{JSON.stringify(r.usage, null, 2)}</pre></CardContent>
             </Card>
           )}
           {r.instructions && (

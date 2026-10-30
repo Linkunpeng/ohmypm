@@ -1,28 +1,26 @@
 # Handoff
 
-## State (2026-10-29, end of session 1)
-All five roadmap phases are implemented and tested (see `progress.md`). Nothing is committed yet: the
-repository has no commits; the user has not asked for one.
+## State (2026-10-30)
+Multica agent core configuration and remote runner continuation are adapted to ohmypm. Named profiles
+have reusable instructions; continuing a run pins its native session, runner, workspace and profile
+snapshot, serializes concurrent turns, sends incremental instructions and rejects reported session-ID
+mismatches. Web supports phone navigation and continuation; CLI, REST and MCP accept `continue_run_id`.
+See `progress.md`, D-010 and D-011. MCP task T-1 tracks the broader port.
+Migration 0002 must be applied before using the updated server.
 
-## How to resume
-```bash
-uv sync && uv run pytest -q
-cd frontend && pnpm install && pnpm test && pnpm build
-```
-Demo setup used during development (scratch DB on :55433, server :8765, runner with fake agent) is
-described in `docs/development.md`.
+## Remaining work
+- Live-verify native session resume for each CLI and measure cache read/write and latency over two real
+  turns; project rules require explicit authorization for real CLI smoke tests. A resume request is not
+  proof that a provider restored a session or hit cache.
+- Test remote Web on a real phone through authenticated HTTPS. No native mobile app or live in-turn
+  steering/interactive approval relay is implemented; approval prompts still fail closed.
+- Assess remaining Multica features: agent chat/AI builder, skills and external MCP config, additional
+  CLI adapters and multi-user invocation permissions. Preserve the runner trust boundary.
+- Older priorities remain: managed artifact storage, MCP resources/stdio, task-level SSE, multi-user roles.
 
-## Suggested next steps (priority order)
-1. Live-verify Codex/Pi/dsh adapters on a machine with network/credentials
-   (`OHMYPM_SMOKE=1 OHMYPM_SMOKE_AGENTS=codex uv run pytest tests/test_smoke_real_cli.py -s`) and add
-   real success transcripts to `tests/fixtures/agent_output/`.
-2. Interactive approvals: relay Claude permission prompts via `--permission-prompt-tool` / stream-json
-   input to a `waiting_approval` UI (currently fail closed).
-3. Managed artifact storage (copy + sha256 + versions) behind the existing `storage_mode`.
-4. MCP resources (`project://`, `task://`) and a stdio proxy (`ohmypm mcp stdio`) for clients without HTTP.
-5. Task-level SSE (dashboard currently polls), route-level code splitting in the UI.
-6. Multi-user roles (principal already carries role/name; tokens table instead of env tokens).
-
-## Open questions for the user
-- Should agents be allowed to dispatch sub-runs by default (`OHMYPM_AGENT_MAX_DISPATCH_DEPTH`, currently 0)?
-- Preferred default Claude/Codex profiles (models, budgets, allowed tools) for unattended runs.
+## Verification and environment
+- Isolated Docker PostgreSQL: 68 passed, 4 real-CLI smoke tests skipped. Unset inherited HTTP(S)_PROXY
+  and ALL_PROXY for local HTTP tests. Ruff, strict mypy, frontend typecheck/test/lint/build passed; lint
+  reports three existing shadcn warnings.
+- A continued run waits for its original runner; retain its state directory/runner ID. `write_mode` is a
+  scheduling flag only; configure CLI sandbox/permissions for actual read-only enforcement.

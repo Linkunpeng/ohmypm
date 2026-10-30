@@ -41,7 +41,7 @@ def main() -> int:
     prompt = sys.stdin.read()
     script = json.loads(os.environ.get("OHMYPM_FAKE_SCRIPT") or "[]")
     task_id = os.environ.get("OHMYPM_TASK_ID", "")
-    emit("session", id=f"fake-{uuid.uuid4()}", cwd=os.getcwd())
+    emit("session", id=os.environ.get("OHMYPM_FAKE_SESSION_ID") or f"fake-{uuid.uuid4()}", cwd=os.getcwd())
     first_line = next((line for line in prompt.splitlines() if line.strip()), "")
     if not script:
         script = [{"message": f"Received prompt ({len(prompt)} chars): {first_line[:120]}"}]
@@ -77,6 +77,8 @@ def main() -> int:
             emit("approval.requested", tool=step["approval"])
         elif "raw" in step:
             print(step["raw"], flush=True)
+        elif "raw_on_resume" in step and os.environ.get("OHMYPM_FAKE_SESSION_ID"):
+            print(step["raw_on_resume"], flush=True)
         elif "fail" in step:
             emit("agent.error", message=str(step["fail"]))
             return 1

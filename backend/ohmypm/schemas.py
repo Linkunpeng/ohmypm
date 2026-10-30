@@ -524,6 +524,7 @@ class AgentProfileCreate(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$")]
     agent_type: Annotated[str, Field(min_length=1, max_length=100)]
     description: str = ""
+    instructions: Annotated[str, Field(max_length=20000)] = ""
     options: dict[str, Any] = Field(default_factory=dict)
     write_mode: bool = True
     timeout_seconds: int | None = Field(default=None, gt=0)
@@ -532,7 +533,9 @@ class AgentProfileCreate(BaseModel):
 
 
 class AgentProfileUpdate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$")] | None = None
     description: str | None = None
+    instructions: Annotated[str, Field(max_length=20000)] | None = None
     options: dict[str, Any] | None = None
     write_mode: bool | None = None
     timeout_seconds: int | None = Field(default=None, gt=0)
@@ -546,6 +549,7 @@ class AgentProfileOut(ORMModel):
     name: str
     agent_type: str
     description: str
+    instructions: str
     options: dict[str, Any]
     write_mode: bool
     timeout_seconds: int | None
@@ -586,6 +590,7 @@ class RunCreate(BaseModel):
     context_mode: ContextMode = ContextMode.STANDARD
     session_id: uuid.UUID | None = Field(default=None, description="Continue an existing AgentSession")
     resume_native: bool = Field(default=False, description="Ask the CLI to resume its native session")
+    continue_run_id: uuid.UUID | None = Field(default=None, description="Continue this run's native session")
     from_checkpoint_id: uuid.UUID | None = None
     timeout_seconds: int | None = Field(default=None, gt=0)
     write_mode: bool | None = None

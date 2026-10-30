@@ -129,6 +129,15 @@ class RunExecutor:
                         RunEventType.AGENT_WARNING, {"message": f"unparsed output: {exc}", "line": truncate(line, 2000)}
                     )
                 ]
+            if (
+                self.a.resume_native
+                and self.state.native_session_id
+                and self.state.native_session_id != self.a.native_session_id
+            ):
+                self.state.extra["resume_mismatch"] = True
+                self.state.native_session_id = None
+                await self.handle.terminate(self.service.config.cancel_grace_seconds)
+                break
             for event in events:
                 self.add(event)
             if self.state.native_session_id and not self.state.extra.get("native_reported"):
@@ -215,6 +224,10 @@ class RunExecutor:
         if adapter is None or capability is None or not capability.available:
             detail = capability.detail if capability else "unknown agent type on this runner"
             return self._fail("agent_unavailable", f"agent {self.a.agent_type!r} is not available: {detail}"), None
+        if self.a.resume_native and (not adapter.supports_native_resume or not self.a.native_session_id):
+            return self._fail(
+                "resume_unavailable", "native session resume is not supported or the session ID is missing"
+            ), None
         try:
             options = adapter.parse_options(self.a.profile.options)
         except OptionsError as exc:
@@ -278,6 +291,10 @@ class RunExecutor:
         except TimeoutError:
             for task in readers:
                 task.cancel()
+        if self.state.extra.get("resume_mismatch"):
+            return self._fail(
+                "resume_mismatch", "agent started a different session; continuation was stopped"
+            ), temp_dir
         if forced is not None:
             forced.native_session_id = self.state.native_session_id
             forced.result_summary = self.state.final_text or self.state.last_message

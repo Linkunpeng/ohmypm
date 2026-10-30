@@ -141,6 +141,7 @@ export const api = {
   agents: () => get<AgentAvailability[]>('/api/agents'),
   profiles: () => get<AgentProfile[]>('/api/agent-profiles'),
   createProfile: (body: Record<string, unknown>) => post<AgentProfile>('/api/agent-profiles', body),
+  updateProfile: (id: string, body: Record<string, unknown>) => request<AgentProfile>('PATCH', `/api/agent-profiles/${id}`, body),
   deleteProfile: (id: string) => request<void>('DELETE', `/api/agent-profiles/${id}`),
 }
 

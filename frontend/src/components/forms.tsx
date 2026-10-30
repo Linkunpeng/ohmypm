@@ -22,7 +22,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { api, errorMessage } from '@/lib/api'
 import { shortId } from '@/lib/format'
-import { ARTIFACT_TYPES, type ContextMode, type Decision, type Task, type TaskPriority } from '@/lib/types'
+import { ARTIFACT_TYPES, type AgentProfile, type ContextMode, type Decision, type Run, type Task, type TaskPriority } from '@/lib/types'
 
 function Field({ label, htmlFor, hint, children }: { label: string; htmlFor?: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -279,22 +279,24 @@ export function DispatchDialog({
   task,
   defaultAgent,
   fromCheckpointId,
+  continueRun,
   trigger,
 }: {
   task: Task
   defaultAgent?: string
   fromCheckpointId?: string
+  continueRun?: Run
   trigger?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const [agent, setAgent] = useState(defaultAgent ?? '')
   const [profile, setProfile] = useState('')
-  const [workspace, setWorkspace] = useState(task.workspace_id ?? '')
+  const [workspace, setWorkspace] = useState(continueRun?.workspace_id ?? task.workspace_id ?? '')
   const [instructions, setInstructions] = useState('')
   const [mode, setMode] = useState<ContextMode>('standard')
   const [timeout, setTimeoutSeconds] = useState('')
-  const [writeMode, setWriteMode] = useState(true)
-  const [resumeNative, setResumeNative] = useState(false)
+  const [writeMode, setWriteMode] = useState<boolean | null>(null)
+  const [resumeNative, setResumeNative] = useState(!!continueRun)
   const [checkpoint, setCheckpoint] = useState(fromCheckpointId ?? '')
   const [force, setForce] = useState(false)
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
@@ -315,6 +317,7 @@ export function DispatchDialog({
     [profiles.data, agent],
   )
   const selectedAgent = agents.data?.find((a) => a.agent_type === agent)
+  const selectedProfile = profiles.data?.find((p) => p.id === profile) ?? profiles.data?.find((p) => p.agent_type === agent && p.is_default)
   const availableSomewhere = selectedAgent?.available_on.some((r) => r.available && r.online)
 
   const mutation = useMutation({
@@ -323,12 +326,13 @@ export function DispatchDialog({
         {
           task_id: task.id,
           agent_type: agent || undefined,
-          profile_id: profile || undefined,
+          profile_id: continueRun ? undefined : profile || undefined,
+          continue_run_id: continueRun?.id,
           workspace_id: workspace || undefined,
           instructions,
           context_mode: mode,
           timeout_seconds: timeout ? Number(timeout) : undefined,
-          write_mode: writeMode,
+          write_mode: writeMode ?? undefined,
           resume_native: resumeNative,
           from_checkpoint_id: checkpoint || undefined,
           force,
@@ -362,7 +366,7 @@ export function DispatchDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             Assign an agent to {task.key}
@@ -371,6 +375,12 @@ export function DispatchDialog({
             The agent starts with the task's recorded context (latest checkpoint, decisions, knowledge) in its workspace.
           </DialogDescription>
         </DialogHeader>
+        {continueRun && (
+          <p className="text-sm text-muted-foreground">
+            Continue with {continueRun.profile_snapshot.name ?? continueRun.agent_type} on the original runner and workspace.
+            {continueRun.native_session_id ? ' The run will wait if that runner is offline.' : ' This run has no native session to continue.'}
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Agent CLI"
@@ -382,9 +392,11 @@ export function DispatchDialog({
           >
             <Select
               value={agent}
+              disabled={!!continueRun}
               onValueChange={(v) => {
                 setAgent(v)
                 setProfile('')
+                setWriteMode(null)
               }}
             >
               <SelectTrigger className="w-full" aria-label="Agent CLI">
@@ -402,8 +414,8 @@ export function DispatchDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Profile">
-            <Select value={profile || 'default'} onValueChange={(v) => setProfile(v === 'default' ? '' : v)}>
+          {!continueRun && <Field label="Profile">
+            <Select disabled={!!continueRun} value={profile || 'default'} onValueChange={(v) => { setProfile(v === 'default' ? '' : v); setWriteMode(null) }}>
               <SelectTrigger className="w-full" aria-label="Profile">
                 <SelectValue />
               </SelectTrigger>
@@ -416,9 +428,9 @@ export function DispatchDialog({
                 ))}
               </SelectContent>
             </Select>
-          </Field>
+          </Field>}
           <Field label="Workspace">
-            <Select value={workspace} onValueChange={setWorkspace}>
+            <Select disabled={!!continueRun} value={workspace} onValueChange={setWorkspace}>
               <SelectTrigger className="w-full" aria-label="Workspace">
                 <SelectValue placeholder="Choose a workspace" />
               </SelectTrigger>
@@ -478,19 +490,20 @@ export function DispatchDialog({
             onChange={(e) => setInstructions(e.target.value)}
           />
         </Field>
+        <p className="text-xs text-muted-foreground">The write setting controls scheduling; configure read-only permissions in the agent's CLI options.</p>
         <div className="flex flex-wrap gap-5 text-sm">
           <label className="flex items-center gap-2">
-            <Switch checked={writeMode} onCheckedChange={setWriteMode} /> Writes to workspace
+            <Switch checked={writeMode ?? continueRun?.write_mode ?? selectedProfile?.write_mode ?? true} onCheckedChange={setWriteMode} /> Writes to workspace
           </label>
           <label className="flex items-center gap-2">
-            <Switch checked={resumeNative} onCheckedChange={setResumeNative} /> Resume native CLI session
+            <Switch disabled={!!continueRun} checked={resumeNative} onCheckedChange={setResumeNative} /> Resume native CLI session
           </label>
           <label className="flex items-center gap-2">
             <Checkbox checked={force} onCheckedChange={(v) => setForce(v === true)} /> Ignore unmet dependencies
           </label>
         </div>
         <DialogFooter>
-          <Button disabled={!agent || !workspace || mutation.isPending} onClick={() => mutation.mutate()}>
+          <Button disabled={!agent || !workspace || (!!continueRun && !continueRun.native_session_id) || mutation.isPending} onClick={() => mutation.mutate()}>
             <Play /> Dispatch
           </Button>
         </DialogFooter>
@@ -721,68 +734,64 @@ export function KnowledgeDialog({ projectId }: { projectId?: string }) {
   )
 }
 
-export function ProfileDialog() {
+export function ProfileDialog({ profile }: { profile?: AgentProfile }) {
   const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [agentType, setAgentType] = useState('claude')
-  const [options, setOptions] = useState('{\n  \n}')
-  const [isDefault, setIsDefault] = useState(false)
-  const [writeMode, setWriteMode] = useState(true)
+  const [name, setName] = useState(profile?.name ?? '')
+  const [agentType, setAgentType] = useState(profile?.agent_type ?? 'claude')
+  const [description, setDescription] = useState(profile?.description ?? '')
+  const [instructions, setInstructions] = useState(profile?.instructions ?? '')
+  const [options, setOptions] = useState(JSON.stringify(profile?.options ?? {}, null, 2))
+  const [timeout, setTimeoutSeconds] = useState(profile?.timeout_seconds?.toString() ?? '')
+  const [isDefault, setIsDefault] = useState(profile?.is_default ?? false)
+  const [writeMode, setWriteMode] = useState(profile?.write_mode ?? true)
   const qc = useQueryClient()
   const mutation = useMutation({
-    mutationFn: () =>
-      api.createProfile({
-        name,
-        agent_type: agentType,
-        options: JSON.parse(options) as Record<string, unknown>,
-        is_default: isDefault,
-        write_mode: writeMode,
-      }),
+    mutationFn: () => {
+      const parsed: unknown = JSON.parse(options)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Options must be a JSON object')
+      const fields = { name, description, instructions, options: parsed, is_default: isDefault, write_mode: writeMode,
+        timeout_seconds: timeout ? Number(timeout) : null }
+      return profile
+        ? api.updateProfile(profile.id, { ...fields, expected_version: profile.version })
+        : api.createProfile({ ...fields, agent_type: agentType })
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['profiles'] })
       setOpen(false)
+      toast.success(profile ? 'Agent updated' : 'Agent created')
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <Plus /> New profile
-        </Button>
+        {profile ? <Button size="xs" variant="outline">Edit</Button> : <Button size="sm" variant="outline"><Plus /> New agent</Button>}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Agent profile</DialogTitle>
+          <DialogTitle>{profile ? 'Edit agent' : 'Create agent'}</DialogTitle>
           <DialogDescription>
-            Options are validated against each agent's whitelist (e.g. claude: model, permission_mode, allowed_tools;
-            codex: model, sandbox). Elevated modes also need <code>allow_dangerous</code> on the runner.
+            Configure reusable instructions and runtime options. Elevated options also require allow_dangerous on the runner.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Name">
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field label="Agent">
-            <Input value={agentType} onChange={(e) => setAgentType(e.target.value)} />
-          </Field>
+          <Field label="Name" htmlFor="profile-name"><Input id="profile-name" value={name} onChange={(e) => setName(e.target.value)} /></Field>
+          <Field label="Agent CLI" htmlFor="profile-agent"><Input id="profile-agent" value={agentType} disabled={!!profile} onChange={(e) => setAgentType(e.target.value)} /></Field>
         </div>
-        <Field label="Options (JSON)">
-          <Textarea className="font-mono text-xs" rows={6} value={options} onChange={(e) => setOptions(e.target.value)} />
+        <Field label="Description" htmlFor="profile-description"><Input id="profile-description" value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+        <Field label="Agent instructions" htmlFor="profile-instructions" hint="Included in every run using this agent.">
+          <Textarea id="profile-instructions" rows={4} maxLength={20000} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
         </Field>
+        <Field label="Options (JSON)" htmlFor="profile-options" hint="Options are validated against the CLI's whitelist.">
+          <Textarea id="profile-options" className="font-mono text-xs" rows={5} value={options} onChange={(e) => setOptions(e.target.value)} />
+        </Field>
+        <Field label="Timeout (seconds)" htmlFor="profile-timeout"><Input id="profile-timeout" type="number" min={1} value={timeout} onChange={(e) => setTimeoutSeconds(e.target.value)} placeholder="Server default" /></Field>
+        <p className="text-xs text-muted-foreground">The write setting controls scheduling; configure read-only permissions in the CLI options.</p>
         <div className="flex gap-5 text-sm">
-          <label className="flex items-center gap-2">
-            <Switch checked={isDefault} onCheckedChange={setIsDefault} /> Default for agent
-          </label>
-          <label className="flex items-center gap-2">
-            <Switch checked={writeMode} onCheckedChange={setWriteMode} /> Writes to workspace
-          </label>
+          <label className="flex items-center gap-2"><Switch checked={isDefault} onCheckedChange={setIsDefault} /> Default for CLI</label>
+          <label className="flex items-center gap-2"><Switch checked={writeMode} onCheckedChange={setWriteMode} /> Writes to workspace</label>
         </div>
-        <DialogFooter>
-          <Button disabled={!name || mutation.isPending} onClick={() => mutation.mutate()}>
-            Save profile
-          </Button>
-        </DialogFooter>
+        <DialogFooter><Button disabled={!name || !agentType || mutation.isPending} onClick={() => mutation.mutate()}>Save agent</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   )

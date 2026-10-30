@@ -25,6 +25,7 @@ from ohmypm_runner.process import LaunchSpec
 
 
 class DshAdapter(BaseAdapter):
+    supports_native_resume = True
     agent_type = "dsh"
     display_name = "DeepSeek Harness"
     default_executable = "dsh"

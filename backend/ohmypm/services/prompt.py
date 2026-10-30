@@ -24,6 +24,15 @@ Use task_id `{task_id}` with these tools. This run is `{run_id}`."""
 
 
 async def build_run_prompt(ctx: Ctx, run: AgentRun, task: Task) -> str:
+    if run.resume_native:
+        instructions = run.instructions.strip() or "Continue working toward the task's acceptance criteria."
+        return (
+            "Continue the existing agent session. The workspace and task may have changed since your last turn; "
+            "use ohmypm tools when you need updated task context.\n\n"
+            f"## Instructions for this run\n{instructions}\n\n"
+            f"Current ohmypm task_id: {task.id}; run_id: {run.id}. "
+            "Record meaningful progress with pm_checkpoint."
+        )
     try:
         mode = ContextMode(run.context_mode)
     except ValueError:
@@ -37,6 +46,12 @@ async def build_run_prompt(ctx: Ctx, run: AgentRun, task: Task) -> str:
         "You are an AI agent working on a task tracked by ohmypm. The context below was generated from the task's "
         "recorded history; treat it as the source of truth about prior work, but verify the workspace state.",
         context.markdown,
+        *(
+            ["## Agent instructions\n" + run.profile_snapshot["instructions"]]
+            if isinstance(run.profile_snapshot.get("instructions"), str)
+            and run.profile_snapshot["instructions"].strip()
+            else []
+        ),
         "## Instructions for this run\n" + instructions,
         PROTOCOL.format(task_id=task.id, run_id=run.id),
     ]

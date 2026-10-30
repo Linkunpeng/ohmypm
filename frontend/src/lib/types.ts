@@ -228,6 +228,7 @@ export interface Run {
   write_mode: boolean
   instructions: string
   context_mode: string
+  resume_native: boolean
   from_checkpoint_id: string | null
   timeout_seconds: number
   pid: number | null
@@ -270,6 +271,7 @@ export interface AgentProfile {
   name: string
   agent_type: string
   description: string
+  instructions: string
   options: Json
   write_mode: boolean
   timeout_seconds: number | null

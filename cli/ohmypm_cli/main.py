@@ -479,6 +479,7 @@ def run_dispatch(
     instructions: Annotated[str, typer.Option("--instructions", "-i")] = "",
     mode: Annotated[str, typer.Option(help="Context mode")] = "standard",
     resume_native: Annotated[bool, typer.Option(help="Resume the CLI's native session")] = False,
+    continue_run: Annotated[str | None, typer.Option(help="Continue a specific run's native session")] = None,
     timeout: Annotated[int | None, typer.Option(help="Timeout in seconds")] = None,
     follow: Annotated[bool, typer.Option("--follow", "-f", help="Stream the run log")] = False,
 ) -> None:
@@ -495,6 +496,7 @@ def run_dispatch(
                 "instructions": instructions,
                 "context_mode": mode,
                 "resume_native": resume_native,
+                "continue_run_id": continue_run,
                 "timeout_seconds": timeout,
             },
         )
@@ -708,6 +710,8 @@ def agent_profile_add(
     name: str,
     agent: Annotated[str, typer.Option("--agent", "-a")],
     options: Annotated[str, typer.Option(help='JSON options, e.g. \'{"model": "sonnet"}\'')] = "{}",
+    description: Annotated[str, typer.Option(help="Agent description")] = "",
+    instructions: Annotated[str, typer.Option(help="Reusable instructions for every run")] = "",
     default: Annotated[bool, typer.Option("--default")] = False,
     read_only: Annotated[bool, typer.Option(help="Does not modify the workspace")] = False,
     timeout: Annotated[int | None, typer.Option()] = None,
@@ -720,6 +724,8 @@ def agent_profile_add(
             {
                 "name": name,
                 "agent_type": agent,
+                "description": description,
+                "instructions": instructions,
                 "options": json.loads(options),
                 "is_default": default,
                 "write_mode": not read_only,

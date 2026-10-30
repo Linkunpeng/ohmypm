@@ -52,6 +52,7 @@ async def create_profile(ctx: Ctx, data: AgentProfileCreate) -> AgentProfile:
         name=data.name,
         agent_type=data.agent_type,
         description=data.description,
+        instructions=data.instructions,
         options=data.options,
         write_mode=data.write_mode,
         timeout_seconds=data.timeout_seconds,
@@ -67,11 +68,18 @@ async def update_profile(ctx: Ctx, profile_id: uuid.UUID, data: AgentProfileUpda
     require_role(ctx.principal, Role.ADMIN)
     profile = await get_or_404(ctx.session, AgentProfile, profile_id, "agent profile")
     check_version(profile, data.expected_version)
+    if data.name is not None and data.name != profile.name:
+        exists = (await ctx.session.execute(select(AgentProfile.id).where(AgentProfile.name == data.name))).first()
+        if exists:
+            raise Conflict(f"profile {data.name!r} already exists", code="profile_exists")
+        profile.name = data.name
     if data.options is not None:
         _validate(profile.agent_type, data.options)
         profile.options = data.options
     if data.description is not None:
         profile.description = data.description
+    if data.instructions is not None:
+        profile.instructions = data.instructions
     if data.write_mode is not None:
         profile.write_mode = data.write_mode
     if "timeout_seconds" in data.model_fields_set:

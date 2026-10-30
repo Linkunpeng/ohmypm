@@ -89,6 +89,7 @@ class BaseAdapter(ABC):
     default_executable: str = ""
     version_args: tuple[str, ...] = ("--version",)
     builtin = True
+    supports_native_resume = False
 
     def __init__(self, runner: RunnerConfig, settings: AgentSettings | None = None) -> None:
         self.runner = runner

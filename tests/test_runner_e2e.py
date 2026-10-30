@@ -423,3 +423,180 @@ async def test_sse_stream_replays_and_resumes(
                 break
     assert seen and seen[0] == 3, "resumes after Last-Event-ID"
     assert seen == sorted(seen)
+
+
+async def test_agent_profile_management_and_dispatch_snapshot(
+    admin: httpx.AsyncClient, live_server: LiveServer, tmp_path: Path
+) -> None:
+    s = await setup_task(admin, tmp_path)
+    created = await admin.post(
+        "/api/agent-profiles",
+        json={
+            "name": "reviewer",
+            "agent_type": "fake",
+            "description": "Review changes",
+            "instructions": "Review security first",
+            "write_mode": False,
+            "is_default": True,
+        },
+    )
+    assert created.status_code == 201, created.text
+    profile = created.json()
+    run_response = await admin.post(
+        "/api/runs", json={"task_id": s["task"]["id"], "profile_id": profile["id"], "instructions": "Inspect the diff"}
+    )
+    assert run_response.status_code == 201, run_response.text
+    run = run_response.json()
+    assert run["write_mode"] is False
+    assert run["profile_snapshot"]["instructions"] == "Review security first"
+    changed = await admin.patch(
+        f"/api/agent-profiles/{profile['id']}",
+        json={"name": "reviewer-v2", "instructions": "New instructions", "expected_version": profile["version"]},
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["name"] == "reviewer-v2"
+    stale = await admin.patch(
+        f"/api/agent-profiles/{profile['id']}", json={"instructions": "Stale", "expected_version": profile["version"]}
+    )
+    assert stale.status_code == 409
+    runner_id = str(uuid.uuid4())
+    async with httpx.AsyncClient(
+        base_url=live_server.url, headers={"Authorization": f"Bearer {RUNNER_TOKEN}"}
+    ) as runner:
+        registered = await runner.post(
+            "/api/runner/register",
+            json={
+                "runner_id": runner_id,
+                "name": "test",
+                "host_id": HOST,
+                "version": "1",
+                "max_parallel": 1,
+                "allowed_roots": [str(tmp_path / "ws")],
+                "agents": [{"agent_type": "fake", "available": True}],
+            },
+        )
+        assert registered.status_code == 200, registered.text
+        claimed = await runner.post(
+            "/api/runner/claim", json={"runner_id": runner_id, "capacity": 1, "agent_types": ["fake"]}
+        )
+        assert claimed.status_code == 200, claimed.text
+        prompt = claimed.json()["runs"][0]["prompt"]
+        assert "Review security first" in prompt
+        assert "Inspect the diff" in prompt
+        assert "New instructions" not in prompt
+    deleted = await admin.delete(f"/api/agent-profiles/{profile['id']}")
+    assert deleted.status_code == 204
+    assert (await admin.get(f"/api/runs/{run['id']}")).json()["profile_snapshot"][
+        "instructions"
+    ] == "Review security first"
+
+
+async def test_native_continuation_pins_runner_and_preserves_snapshot(
+    admin: httpx.AsyncClient, live_server: LiveServer, tmp_path: Path
+) -> None:
+    s = await setup_task(admin, tmp_path)
+    created = await admin.post(
+        "/api/agent-profiles",
+        json={
+            "name": "continuity",
+            "agent_type": "fake",
+            "instructions": "stable agent instructions",
+            "options": {"script": [{"message": "worked"}]},
+        },
+    )
+    profile = created.json()
+    first_resp = await admin.post("/api/runs", json={"task_id": s["task"]["id"], "profile_id": profile["id"]})
+    assert first_resp.status_code == 201, first_resp.text
+    service = RunnerService(runner_config(live_server, tmp_path))
+    async with running(service):
+        first = await wait_status(admin, first_resp.json()["id"], {"completed", "failed"})
+    assert first["status"] == "completed", first
+    assert (
+        await admin.patch(f"/api/agent-profiles/{profile['id']}", json={"instructions": "changed"})
+    ).status_code == 200
+
+    body = {"task_id": s["task"]["id"], "continue_run_id": first["id"], "instructions": "Please continue"}
+    responses = await asyncio.gather(admin.post("/api/runs", json=body), admin.post("/api/runs", json=body))
+    assert sorted(r.status_code for r in responses) == [201, 409]
+    queued = next(r.json() for r in responses if r.status_code == 201)
+    assert queued["runner_id"] == str(service.runner_id)
+    assert queued["session_id"] == first["session_id"]
+    assert queued["resume_native"] is True
+    assert queued["profile_snapshot"] == first["profile_snapshot"]
+    assert (await admin.post("/api/runs", json={**body, "workspace_id": str(uuid.uuid4())})).status_code == 422
+
+    other_id = str(uuid.uuid4())
+    async with httpx.AsyncClient(base_url=live_server.url, headers={"Authorization": f"Bearer {RUNNER_TOKEN}"}) as rc:
+        registered = await rc.post(
+            "/api/runner/register",
+            json={
+                "runner_id": other_id,
+                "name": "other",
+                "host_id": HOST,
+                "version": "1",
+                "max_parallel": 1,
+                "allowed_roots": [str(tmp_path / "ws")],
+                "agents": [{"agent_type": "fake", "available": True}],
+            },
+        )
+        assert registered.status_code == 200, registered.text
+        claim = await rc.post("/api/runner/claim", json={"runner_id": other_id, "capacity": 1, "agent_types": ["fake"]})
+        assert claim.json()["runs"] == []
+        claim = await rc.post(
+            "/api/runner/claim", json={"runner_id": str(service.runner_id), "capacity": 1, "agent_types": ["fake"]}
+        )
+        assignment = claim.json()["runs"][0]
+        assert assignment["native_session_id"] == first["native_session_id"]
+        assert "Please continue" in assignment["prompt"]
+        assert "stable agent instructions" not in assignment["prompt"]
+        assert "## How to report progress" not in assignment["prompt"]
+        finished = await rc.post(
+            f"/api/runner/runs/{queued['id']}/finish",
+            headers={"X-Runner-Id": str(service.runner_id)},
+            json={"status": "completed", "native_session_id": first["native_session_id"]},
+        )
+        assert finished.status_code == 200, finished.text
+    assert (await admin.post("/api/runs", json=body)).status_code == 409
+    third = await admin.post("/api/runs", json={**body, "continue_run_id": queued["id"]})
+    assert third.status_code == 201, third.text
+    resumed_service = RunnerService(runner_config(live_server, tmp_path, runner_id=str(service.runner_id)))
+    async with running(resumed_service):
+        done = await wait_status(admin, third.json()["id"], {"completed", "failed"})
+    assert done["status"] == "completed", done
+    assert done["native_session_id"] == first["native_session_id"]
+
+
+async def test_missing_native_session_is_not_silently_restarted(admin: httpx.AsyncClient, tmp_path: Path) -> None:
+    s = await setup_task(admin, tmp_path)
+    response = await admin.post(
+        "/api/runs", json={"task_id": s["task"]["id"], "agent_type": "fake", "resume_native": True}
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "resume_unavailable"
+
+
+async def test_unexpected_native_session_does_not_replace_original(
+    admin: httpx.AsyncClient, live_server: LiveServer, tmp_path: Path
+) -> None:
+    s = await setup_task(admin, tmp_path)
+    created = await admin.post(
+        "/api/agent-profiles",
+        json={
+            "name": "bad-resume",
+            "agent_type": "fake",
+            "options": {"script": [{"raw_on_resume": '{"type":"session","id":"different-session"}'}]},
+        },
+    )
+    assert created.status_code == 201
+    initial = await admin.post("/api/runs", json={"task_id": s["task"]["id"], "profile_id": created.json()["id"]})
+    service = RunnerService(runner_config(live_server, tmp_path))
+    async with running(service):
+        first = await wait_status(admin, initial.json()["id"], {"completed", "failed"})
+        assert first["status"] == "completed", first
+        follow = await admin.post("/api/runs", json={"task_id": s["task"]["id"], "continue_run_id": first["id"]})
+        assert follow.status_code == 201, follow.text
+        second = await wait_status(admin, follow.json()["id"], {"completed", "failed"})
+    assert second["status"] == "failed"
+    assert second["error_code"] == "resume_mismatch"
+    sessions = (await admin.get(f"/api/tasks/{s['task']['id']}/sessions")).json()
+    assert sessions[0]["native_session_id"] == first["native_session_id"]

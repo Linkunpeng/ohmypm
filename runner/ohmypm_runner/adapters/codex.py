@@ -32,6 +32,7 @@ def _toml(value: str) -> str:
 
 
 class CodexAdapter(BaseAdapter):
+    supports_native_resume = True
     agent_type = "codex"
     display_name = "Codex CLI"
     default_executable = "codex"

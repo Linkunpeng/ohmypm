@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   ListTodo,
   LogOut,
+  Menu,
   MessageCircleQuestion,
   Moon,
   Package,
@@ -19,6 +20,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { api } from '@/lib/api'
 import { clearToken } from '@/lib/auth'
 import { cn } from '@/lib/utils'
@@ -34,10 +36,25 @@ const NAV = [
   { to: '/search', label: 'Search', icon: Search },
 ]
 
+function Navigation({ pendingCount, onNavigate }: { pendingCount: number; onNavigate?: () => void }) {
+  return <nav className="flex-1 space-y-0.5 p-2">
+    {NAV.map(({ to, label, icon: Icon, end, badge }) => (
+      <NavLink key={to} to={to} end={end} onClick={onNavigate} className={({ isActive }) => cn(
+        'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground',
+        isActive && 'bg-muted font-medium text-foreground',
+      )}>
+        <Icon className="size-4" /><span className="flex-1">{label}</span>
+        {badge === 'decisions' && pendingCount > 0 && <Badge className="h-5 bg-amber-500 px-1.5 text-white">{pendingCount}</Badge>}
+      </NavLink>
+    ))}
+  </nav>
+}
+
 export function AppShell({ onLogout }: { onLogout: () => void }) {
   const navigate = useNavigate()
   const { resolvedTheme, setTheme } = useTheme()
   const [query, setQuery] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const pending = useQuery({
     queryKey: ['decisions', 'pending-count'],
@@ -58,32 +75,12 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <aside className="flex w-52 shrink-0 flex-col border-r bg-muted/30">
+      <aside className="hidden w-52 shrink-0 flex-col border-r bg-muted/30 md:flex">
         <div className="flex h-12 items-center gap-2 border-b px-4 font-semibold tracking-tight">
           <span className="rounded bg-primary px-1.5 py-0.5 font-mono text-xs text-primary-foreground">pm</span>
           ohmypm
         </div>
-        <nav className="flex-1 space-y-0.5 p-2">
-          {NAV.map(({ to, label, icon: Icon, end, badge }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition hover:bg-muted hover:text-foreground',
-                  isActive && 'bg-muted font-medium text-foreground',
-                )
-              }
-            >
-              <Icon className="size-4" />
-              <span className="flex-1">{label}</span>
-              {badge === 'decisions' && (pending.data?.total ?? 0) > 0 && (
-                <Badge className="h-5 bg-amber-500 px-1.5 text-white">{pending.data?.total}</Badge>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+        <Navigation pendingCount={pending.data?.total ?? 0} />
         <div className="border-t p-2 text-xs text-muted-foreground">
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => { clearToken(); onLogout() }}>
             <LogOut /> Sign out
@@ -92,6 +89,14 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-3 border-b px-4">
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+            <SheetTrigger asChild><Button variant="ghost" size="icon" className="shrink-0 md:hidden" aria-label="Open navigation"><Menu /></Button></SheetTrigger>
+            <SheetContent side="left" aria-describedby={undefined}>
+              <SheetHeader><SheetTitle>ohmypm</SheetTitle></SheetHeader>
+              <Navigation pendingCount={pending.data?.total ?? 0} onNavigate={() => setMenuOpen(false)} />
+              <div className="border-t p-2"><Button variant="ghost" size="sm" onClick={() => { clearToken(); setMenuOpen(false); onLogout() }}><LogOut /> Sign out</Button></div>
+            </SheetContent>
+          </Sheet>
           <form
             className="relative w-full max-w-md"
             onSubmit={(e) => {
@@ -120,7 +125,7 @@ export function AppShell({ onLogout }: { onLogout: () => void }) {
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-auto">
-          <div className="mx-auto max-w-7xl p-6">
+          <div className="mx-auto max-w-7xl p-3 sm:p-6">
             <Outlet />
           </div>
         </main>

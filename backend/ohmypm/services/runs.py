@@ -166,37 +166,92 @@ async def dispatch_run(ctx: Ctx, data: RunCreate, *, idempotency_key: str | None
         raise Conflict(
             "task has unfinished dependencies", code="dependencies_unmet", details={"unmet": [str(u) for u in unmet]}
         )
-    profile = await _resolve_profile(ctx, data)
-    agent_type = data.agent_type or (profile.agent_type if profile else None)
+    prior: AgentRun | None = None
+    if data.continue_run_id is not None:
+        prior = await get_or_404(ctx.session, AgentRun, data.continue_run_id, "run")
+        if prior.task_id != task.id:
+            raise ValidationFailed("run does not belong to this task")
+        if data.agent_type and data.agent_type != prior.agent_type:
+            raise ValidationFailed("continuation must use the same agent type")
+        if data.workspace_id and data.workspace_id != prior.workspace_id:
+            raise ValidationFailed("continuation must use the same workspace")
+        if data.profile_id or data.profile_name or data.session_id:
+            raise ValidationFailed("continuation uses the original run's profile and session")
+    profile = None if prior else await _resolve_profile(ctx, data)
+    agent_type = prior.agent_type if prior else data.agent_type or (profile.agent_type if profile else None)
     if not agent_type:
         raise ValidationFailed("agent_type or profile is required")
     if profile is not None and profile.agent_type != agent_type:
         raise ValidationFailed(f"profile {profile.name!r} is for agent {profile.agent_type!r}, not {agent_type!r}")
-    workspace_id = data.workspace_id or task.workspace_id
+    workspace_id = prior.workspace_id if prior else data.workspace_id or task.workspace_id
     if workspace_id is None:
         raise ValidationFailed("a workspace is required to run an agent (task has none)", code="workspace_required")
     await get_or_404(ctx.session, Workspace, workspace_id, "workspace")
 
+    resume_native = data.resume_native or prior is not None
+    if resume_native and prior is None:
+        stmt = select(AgentRun).where(
+            AgentRun.task_id == task.id,
+            AgentRun.workspace_id == workspace_id,
+            AgentRun.agent_type == agent_type,
+            AgentRun.native_session_id.is_not(None),
+            AgentRun.runner_id.is_not(None),
+        )
+        if data.session_id:
+            stmt = stmt.where(AgentRun.session_id == data.session_id)
+        if profile:
+            stmt = stmt.where(AgentRun.agent_profile_id == profile.id)
+        prior = (
+            await ctx.session.execute(stmt.order_by(AgentRun.created_at.desc(), AgentRun.id.desc()).limit(1))
+        ).scalar_one_or_none()
+        if prior is None:
+            raise ValidationFailed("no native session is available to resume", code="resume_unavailable")
     session: AgentSession | None = None
-    if data.session_id is not None:
-        session = await memory.get_session(ctx, data.session_id)
+    if prior is not None:
+        if prior.session_id is None or prior.runner_id is None or not prior.native_session_id:
+            raise ValidationFailed("the selected run has no resumable native session", code="resume_unavailable")
+        session = (
+            await ctx.session.execute(select(AgentSession).where(AgentSession.id == prior.session_id).with_for_update())
+        ).scalar_one_or_none()
+        if session is None or session.native_session_id != prior.native_session_id:
+            raise Conflict("the selected run is not the latest session state", code="resume_stale")
+        latest = (
+            await ctx.session.execute(
+                select(AgentRun.id)
+                .where(AgentRun.session_id == session.id, AgentRun.native_session_id.is_not(None))
+                .order_by(AgentRun.created_at.desc(), AgentRun.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if latest != prior.id:
+            raise Conflict("continue from the latest run of this session", code="resume_stale")
+        busy = (
+            await ctx.session.execute(
+                select(AgentRun.id)
+                .where(AgentRun.session_id == session.id, AgentRun.status.in_([RunStatus.QUEUED.value, *ACTIVE]))
+                .limit(1)
+            )
+        ).first()
+        if busy:
+            raise Conflict("this session already has a queued or active run", code="session_busy")
+    elif data.session_id is not None:
+        await memory.get_session(ctx, data.session_id)
+        session = (
+            await ctx.session.execute(select(AgentSession).where(AgentSession.id == data.session_id).with_for_update())
+        ).scalar_one()
         if session.task_id != task.id:
             raise ValidationFailed("session does not belong to this task")
         if session.agent_type != agent_type:
             raise ValidationFailed("session belongs to a different agent type")
-    elif data.resume_native:
-        session = (
+        busy = (
             await ctx.session.execute(
-                select(AgentSession)
-                .where(
-                    AgentSession.task_id == task.id,
-                    AgentSession.agent_type == agent_type,
-                    AgentSession.native_session_id.is_not(None),
-                )
-                .order_by(AgentSession.updated_at.desc())
+                select(AgentRun.id)
+                .where(AgentRun.session_id == session.id, AgentRun.status.in_([RunStatus.QUEUED.value, *ACTIVE]))
                 .limit(1)
             )
-        ).scalar_one_or_none()
+        ).first()
+        if busy:
+            raise Conflict("this session already has a queued or active run", code="session_busy")
     if session is None:
         session = AgentSession(
             task_id=task.id,
@@ -219,19 +274,31 @@ async def dispatch_run(ctx: Ctx, data: RunCreate, *, idempotency_key: str | None
 
     timeout = (
         data.timeout_seconds
-        or (profile.timeout_seconds if profile else None)
+        or (prior.timeout_seconds if prior else profile.timeout_seconds if profile else None)
         or ctx.settings.default_run_timeout_seconds
     )
     timeout = min(timeout, ctx.settings.max_run_timeout_seconds)
-    write_mode = data.write_mode if data.write_mode is not None else (profile.write_mode if profile else True)
+    write_mode = (
+        data.write_mode
+        if data.write_mode is not None
+        else (prior.write_mode if prior else profile.write_mode if profile else True)
+    )
     run = AgentRun(
         task_id=task.id,
         session_id=session.id,
         workspace_id=workspace_id,
         agent_type=agent_type,
-        agent_profile_id=profile.id if profile else None,
+        runner_id=prior.runner_id if prior else None,
+        agent_profile_id=prior.agent_profile_id if prior else profile.id if profile else None,
         profile_snapshot=(
-            {"id": str(profile.id), "name": profile.name, "options": profile.options}
+            dict(prior.profile_snapshot)
+            if prior
+            else {
+                "id": str(profile.id),
+                "name": profile.name,
+                "options": profile.options,
+                "instructions": profile.instructions,
+            }
             if profile
             else {"name": f"{agent_type} (defaults)", "options": {}}
         ),
@@ -240,7 +307,7 @@ async def dispatch_run(ctx: Ctx, data: RunCreate, *, idempotency_key: str | None
         instructions=data.instructions,
         context_mode=data.context_mode.value,
         from_checkpoint_id=data.from_checkpoint_id,
-        resume_native=data.resume_native,
+        resume_native=resume_native,
         timeout_seconds=timeout,
         dispatch_depth=depth,
         parent_run_id=ctx.principal.run_id,

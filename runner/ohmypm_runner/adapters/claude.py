@@ -31,6 +31,7 @@ FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 
 class ClaudeAdapter(BaseAdapter):
+    supports_native_resume = True
     agent_type = "claude"
     display_name = "Claude Code"
     default_executable = "claude"
