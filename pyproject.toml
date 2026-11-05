@@ -1,0 +1,67 @@
+[project]
+name = "ohmypm"
+version = "0.1.0"
+description = "Oh My Project Memory - local-first, zero-intrusion development memory for AI agents"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "ohmypm contributors" }]
+keywords = ["ai-agent", "mcp", "project-memory", "developer-tools", "sqlite"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: POSIX :: Linux",
+    "Environment :: Console",
+    "Topic :: Software Development",
+]
+dependencies = [
+    "sqlalchemy>=2.0.36,<3",
+    "alembic>=1.14,<2",
+    "pydantic>=2.9,<3",
+    "typer>=0.15,<1",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.32,<1",
+    "python-multipart>=0.0.18",
+    "mcp>=2.0,<3",
+]
+
+[project.scripts]
+ohmypm = "ohmypm.cli.main:main"
+ohmypm-mcp = "ohmypm.mcp.server:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "httpx>=0.28",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ohmypm"]
+# The compiled Web UI is produced by `scripts/build-frontend.sh` and is not
+# tracked in git, so force-include it in wheels when present.
+artifacts = ["src/ohmypm/webui/dist/**"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/ohmypm", "tests", "docs", "README.md", "LICENSE", "alembic.ini"]
+artifacts = ["src/ohmypm/webui/dist/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["B008", "E501"]  # line length is handled by `ruff format`
