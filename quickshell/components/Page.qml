@@ -14,10 +14,6 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-    function scroll(pages: real): void {
-        contentY = Math.max(0, Math.min(contentHeight - height, contentY + height * 0.8 * pages));
-    }
-
     Column {
         id: column
         width: root.width - 14

@@ -5,7 +5,7 @@ import "../services"
 Page {
     id: page
     required property var view
-    signal done                            // Esc: give the keyboard back to the panel
+    signal done                            // Esc in the field: give h j k l back to the panel
     signal showSummary
 
     property string query
@@ -94,7 +94,7 @@ Page {
         text: page.searching ? "搜索中…"
             : page.error ? "搜索失败：" + page.error
             : page.query ? (page.results.length ? page.results.length + " 条结果" : "没有找到「" + page.query + "」")
-            : "按 / 随时开始搜索，Esc 返回。"
+            : "输入关键词，搜索这个项目的记录和摘要。"
         color: page.error ? Style.urgent : Style.inactive
         font.bold: false
         font.pixelSize: 12

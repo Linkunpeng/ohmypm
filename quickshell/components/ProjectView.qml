@@ -27,14 +27,11 @@ ColumnLayout {
 
     spacing: 0
 
-    function showTab(index: int): void {
+    // focusSearch: put the cursor in the search field (clicks), not when moving with h / l.
+    function showTab(index: int, focusSearch: bool): void {
         tab = index;
-        if (index === 3)
+        if (index === 3 && focusSearch)
             search.focusInput();
-    }
-
-    function scroll(pages: real): void {
-        root.pages[tab].scroll(pages);
     }
 
     onProjectChanged: {
@@ -145,7 +142,7 @@ ColumnLayout {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.showTab(tabItem.index)
+                        onClicked: root.showTab(tabItem.index, true)
                     }
                 }
             }
@@ -173,7 +170,7 @@ ColumnLayout {
         OverviewTab {
             id: overview
             view: root
-            onShowTab: index => root.showTab(index)
+            onShowTab: index => root.showTab(index, false)
         }
         TimelineTab {
             id: timeline
@@ -187,7 +184,7 @@ ColumnLayout {
             id: search
             view: root
             onDone: root.searchDone()
-            onShowSummary: root.showTab(2)
+            onShowSummary: root.showTab(2, false)
         }
     }
 }

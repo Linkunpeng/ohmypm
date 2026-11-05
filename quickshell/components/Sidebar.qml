@@ -143,16 +143,4 @@ ColumnLayout {
             onClicked: Memory.select(modelData.id)
         }
     }
-
-    Flow {
-        Layout.fillWidth: true
-        Layout.topMargin: 10
-        spacing: 10
-        KeyHint { keys: "↑↓"; text: "切换" }
-        KeyHint { keys: "1-4"; text: "标签" }
-        KeyHint { keys: "/"; text: "搜索" }
-        KeyHint { keys: "T"; text: "终端" }
-        KeyHint { keys: "C"; text: "复制上下文" }
-        KeyHint { keys: "Esc"; text: "隐藏" }
-    }
 }
