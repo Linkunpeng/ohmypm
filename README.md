@@ -93,6 +93,10 @@ ohmypm web --open     # 同时打开浏览器
 
 总览、项目时间线（按类型/状态/关键词/时间筛选）、记录详情与编辑（富文本 + Markdown 源码模式，图片拖拽/粘贴上传）、Mermaid、KaTeX、代码高亮、项目摘要编辑、全文搜索、Agent 上下文预览；支持浅色/深色主题。只监听 127.0.0.1，并带有访问令牌、Host/Origin 校验等保护。见 [docs/api.md](docs/api.md)。
 
+## 桌面面板（Quickshell）
+
+`quickshell/` 是一个 Quickshell 面板，在 Hyprland 中用 `SUPER + I` 唤出 / 隐藏，和普通窗口一样平铺：总览所有项目的问题与近两周活动；自动选中聚焦窗口所在的项目，显示摘要、未解决的问题和最近记录，可一键打开终端、复制 Agent 上下文或跳转 Web UI。外观沿用 ohmyhypr 状态栏。见 [quickshell/README.md](quickshell/README.md)。
+
 ## 数据位置
 
 | 内容 | 默认位置 | 覆盖方式 |
