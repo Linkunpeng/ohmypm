@@ -1,0 +1,400 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/400-italic.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource-variable/source-serif-4/index.css";
+@import "@fontsource-variable/source-serif-4/wght-italic.css";
+@import "katex/dist/katex.min.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * ohmypm "logbook" palette: cool graph-paper ground, slate ink, blueprint blue.
+ * Entry types carry their own restrained hues (used for the timeline margin marks).
+ */
+:root {
+  --background: #f6f7f4;
+  --foreground: #1e2a2f;
+  --card: #ffffff;
+  --card-foreground: #1e2a2f;
+  --popover: #ffffff;
+  --popover-foreground: #1e2a2f;
+  --primary: #2f6f8f;
+  --primary-foreground: #f6f7f4;
+  --secondary: #e9ede8;
+  --secondary-foreground: #1e2a2f;
+  --muted: #eceee9;
+  --muted-foreground: #5b6b70;
+  --accent: #e3ecef;
+  --accent-foreground: #1e2a2f;
+  --destructive: #b03a48;
+  --border: #dce2de;
+  --input: #cfd7d3;
+  --ring: #2f6f8f;
+  --radius: 0.5rem;
+  --sidebar: #eef1ec;
+  --sidebar-foreground: #1e2a2f;
+  --sidebar-border: #dce2de;
+  --sidebar-accent: #e1e8e4;
+  --rule: #e2e7e3;
+  --code-bg: #eef1ed;
+
+  --type-milestone: #2e7d5b;
+  --type-issue: #b03a48;
+  --type-decision: #7d3c98;
+  --type-knowledge: #2f6f8f;
+  --type-artifact: #9a6b12;
+  --type-note: #66767b;
+
+  --hl-keyword: #6a4fb0;
+  --hl-string: #2e7d5b;
+  --hl-number: #9a6b12;
+  --hl-comment: #7c8a8e;
+  --hl-title: #2f6f8f;
+  --hl-attr: #b03a48;
+}
+
+.dark {
+  --background: #12181b;
+  --foreground: #dce5e3;
+  --card: #182024;
+  --card-foreground: #dce5e3;
+  --popover: #182024;
+  --popover-foreground: #dce5e3;
+  --primary: #7fb8d4;
+  --primary-foreground: #10171a;
+  --secondary: #1f282c;
+  --secondary-foreground: #dce5e3;
+  --muted: #1c2427;
+  --muted-foreground: #8fa0a4;
+  --accent: #1f2d33;
+  --accent-foreground: #dce5e3;
+  --destructive: #e57a86;
+  --border: #2a363b;
+  --input: #34434a;
+  --ring: #7fb8d4;
+  --sidebar: #0f1417;
+  --sidebar-foreground: #dce5e3;
+  --sidebar-border: #232e33;
+  --sidebar-accent: #1b2428;
+  --rule: #222c30;
+  --code-bg: #0e1416;
+
+  --type-milestone: #6cc59a;
+  --type-issue: #e57a86;
+  --type-decision: #bf86ec;
+  --type-knowledge: #7fb8d4;
+  --type-artifact: #d9a84a;
+  --type-note: #95a5a9;
+
+  --hl-keyword: #b9a5f0;
+  --hl-string: #8fd3b0;
+  --hl-number: #e3b766;
+  --hl-comment: #6f8186;
+  --hl-title: #8cc4df;
+  --hl-attr: #ec9aa4;
+}
+
+@theme inline {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-heading: var(--font-sans);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-rule: var(--rule);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    font-feature-settings: "tnum" 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ prose */
+
+.md-prose {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.72;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+.md-prose > * + * {
+  margin-top: 0.9em;
+}
+.md-prose h1,
+.md-prose h2,
+.md-prose h3,
+.md-prose h4,
+.md-prose h5,
+.md-prose h6 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.6em;
+  letter-spacing: -0.005em;
+}
+.md-prose h1 {
+  font-size: 1.5rem;
+}
+.md-prose h2 {
+  font-size: 1.25rem;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--rule);
+}
+.md-prose h3 {
+  font-size: 1.075rem;
+}
+.md-prose h4,
+.md-prose h5,
+.md-prose h6 {
+  font-size: 1rem;
+  color: var(--muted-foreground);
+}
+.md-prose > :first-child {
+  margin-top: 0;
+}
+.md-prose a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.md-prose strong {
+  font-weight: 650;
+}
+.md-prose ul,
+.md-prose ol {
+  padding-left: 1.4em;
+}
+.md-prose ul {
+  list-style: disc;
+}
+.md-prose ol {
+  list-style: decimal;
+}
+.md-prose li + li {
+  margin-top: 0.25em;
+}
+.md-prose li > ul,
+.md-prose li > ol {
+  margin-top: 0.25em;
+}
+.md-prose ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.md-prose .task-list-item input {
+  margin-right: 0.5em;
+  accent-color: var(--primary);
+  transform: translateY(1px);
+}
+.md-prose blockquote {
+  border-left: 3px solid var(--primary);
+  padding: 0.1em 0 0.1em 1em;
+  color: var(--muted-foreground);
+}
+.md-prose hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2em 0;
+}
+.md-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 0.12em 0.35em;
+}
+.md-prose pre {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  line-height: 1.6;
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 0.9em 1.1em;
+  overflow-x: auto;
+}
+.md-prose pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+.md-prose table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.md-prose th,
+.md-prose td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.75em;
+  text-align: left;
+}
+.md-prose th {
+  background: var(--muted);
+  font-weight: 600;
+}
+.md-prose img {
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--rule);
+}
+.md-prose .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
+}
+
+/* highlight.js tokens mapped to the palette */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-type {
+  color: var(--hl-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--hl-string);
+}
+.hljs-number,
+.hljs-literal,
+.hljs-symbol {
+  color: var(--hl-number);
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: var(--hl-comment);
+  font-style: italic;
+}
+.hljs-title,
+.hljs-section,
+.hljs-function .hljs-title {
+  color: var(--hl-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-deletion,
+.hljs-tag {
+  color: var(--hl-attr);
+}
+
+/* ------------------------------------------------------------- MDXEditor */
+
+.ohmypm-editor {
+  --baseBase: var(--background);
+  --baseBgSubtle: var(--muted);
+  --baseBg: var(--card);
+  --baseBgHover: var(--accent);
+  --baseBgActive: var(--secondary);
+  --baseLine: var(--border);
+  --baseBorder: var(--border);
+  --baseBorderHover: var(--input);
+  --baseSolid: var(--muted-foreground);
+  --baseSolidHover: var(--foreground);
+  --baseText: var(--muted-foreground);
+  --baseTextContrast: var(--foreground);
+  --accentBase: var(--accent);
+  --accentBgSubtle: var(--accent);
+  --accentBg: var(--accent);
+  --accentBgHover: var(--accent);
+  --accentBgActive: var(--accent);
+  --accentLine: var(--primary);
+  --accentBorder: var(--primary);
+  --accentBorderHover: var(--primary);
+  --accentSolid: var(--primary);
+  --accentSolidHover: var(--primary);
+  --accentText: var(--primary);
+  --accentTextContrast: var(--foreground);
+  --basePageBg: var(--card);
+  --font-body: var(--font-serif);
+  --font-mono: var(--font-mono);
+  background: var(--card);
+  color: var(--foreground);
+}
+.ohmypm-editor [role="toolbar"] {
+  background: var(--muted);
+  border-radius: 6px 6px 0 0;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-sans);
+}
+/* Only the root editing area gets a minimum height, not nested editors
+   (code blocks, table cells) which are contenteditable too. */
+.ohmypm-editor .ohmypm-editor-content {
+  min-height: 320px;
+}
+.ohmypm-editor .ohmypm-editor-content table td,
+.ohmypm-editor .ohmypm-editor-content table th {
+  vertical-align: top;
+}
+.ohmypm-editor .cm-editor {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+}
+.ohmypm-editor-content {
+  padding: 1rem 1.25rem 2rem;
+}
+.ohmypm-editor-content img {
+  max-width: 100%;
+}
