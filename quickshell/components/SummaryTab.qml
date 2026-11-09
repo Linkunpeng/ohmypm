@@ -22,7 +22,7 @@ Page {
         text: "第 " + (page.summary?.revision ?? 0) + " 版，" + (page.summary?.updated_by ? page.summary.updated_by + " " : "") + "更新于 " + Style.when(page.summary?.updated_at)
         color: Style.inactive
         font.bold: false
-        font.pixelSize: 12
+        font.pixelSize: Style.px(12)
     }
 
     BarText {

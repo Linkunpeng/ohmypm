@@ -30,7 +30,7 @@ Column {
     }
 
     // Readout: which days, then a glyph + count per type (the legend).
-    Row {
+    Flow {
         width: root.width
         spacing: 14
         BarText {
@@ -53,7 +53,7 @@ Column {
     Item {
         id: plot
         // Left gutter holds the peak value.
-        readonly property real gutter: 24
+        readonly property real gutter: Style.px(24)
         x: gutter
         width: root.width - gutter
         height: root.plotHeight
@@ -76,7 +76,7 @@ Column {
             text: root.peak
             color: Style.inactive
             font.bold: false
-            font.pixelSize: 11
+            font.pixelSize: Style.px(11)
             visible: root.total > 0
         }
         Rectangle {
@@ -154,7 +154,7 @@ Column {
     // Day ticks: first, middle and today.
     Item {
         width: root.width
-        height: 14
+        height: Style.px(18)
         Repeater {
             model: [0, Math.floor(root.days / 2), root.days - 1]
             delegate: BarText {
@@ -163,7 +163,7 @@ Column {
                 text: modelData === root.days - 1 ? "今天" : root.dayLabel(root.buckets[modelData].date)
                 color: Style.inactive
                 font.bold: false
-                font.pixelSize: 11
+                font.pixelSize: Style.px(11)
             }
         }
     }

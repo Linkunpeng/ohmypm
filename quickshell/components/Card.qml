@@ -30,8 +30,8 @@ Rectangle {
             Row {
                 id: titleRow
                 spacing: 10
-                BarText { text: root.glyph; color: root.tint; font.pixelSize: 15; visible: text !== "" }
-                BarText { text: root.title; font.pixelSize: 15 }
+                BarText { text: root.glyph; color: root.tint; font.pixelSize: Style.px(15); visible: text !== "" }
+                BarText { text: root.title; font.pixelSize: Style.px(15) }
             }
             Row {
                 id: trailingSlot

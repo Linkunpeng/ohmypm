@@ -33,7 +33,7 @@ Page {
     GridLayout {
         width: parent.width
         visible: page.view.detail !== null && !page.view.detail.error
-        columns: page.width >= 760 ? 2 : 1
+        columns: page.width >= Style.px(760) ? 2 : 1
         columnSpacing: 16
         rowSpacing: 16
 
@@ -98,7 +98,7 @@ Page {
                         Layout.alignment: Qt.AlignTop
                         text: modelData.done ? Style.glyphs.checked : Style.glyphs.unchecked
                         color: modelData.done ? Style.accent : Style.inactive
-                        font.pixelSize: 15
+                        font.pixelSize: Style.px(15)
                     }
                     BarText {
                         Layout.fillWidth: true
@@ -154,7 +154,7 @@ Page {
             visible: page.view.recent.length > 6
             text: "查看全部"
             color: Style.accent
-            font.pixelSize: 13
+            font.pixelSize: Style.px(13)
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor

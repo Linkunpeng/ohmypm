@@ -39,6 +39,9 @@ Start with pm_get_status, then pm_get_context. Record only information with
 lasting value (milestones, non-trivial issues, decisions, durable knowledge,
 artifact usage) via pm_add_entry; never store secrets. Update the summary
 with pm_update_summary when the project state changed meaningfully.
+Write readable Markdown in the user's language. For longer, multi-topic records,
+use headings and focused bullet points; separate paragraphs with blank lines and
+mark paths/commands with backticks. Keep facts, failed attempts and uncertainty intact.
 Do not register projects unless the user asks (use the `ohmypm register` CLI).
 """
 
@@ -233,7 +236,12 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
     def pm_add_entry(
         title: Annotated[str, Field(description="Short, specific title.")],
         type: EntryType = "note",
-        content: Annotated[str, Field(description="Markdown body.")] = "",
+        content: Annotated[
+            str,
+            Field(
+                description="Markdown body in the user's language. Use headings and focused bullets for longer, multi-topic records, blank lines between paragraphs, and backticks for paths/commands. Preserve facts and uncertainty."
+            ),
+        ] = "",
         project: ProjectArg = None,
         workspace_path: WorkspaceArg = None,
         status: Annotated[Status | None, Field(description="Issues default to 'open'.")] = None,
@@ -307,8 +315,18 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
         workspace_path: WorkspaceArg = None,
         title: Annotated[str | None, Field(description="New title.")] = None,
         type: Annotated[str | None, Field(description="New type.")] = None,
-        content: Annotated[str | None, Field(description="Replace the Markdown body.")] = None,
-        append_content: Annotated[str | None, Field(description="Append Markdown to the body.")] = None,
+        content: Annotated[
+            str | None,
+            Field(
+                description="Replace the Markdown body. Use headings and focused bullets for longer, multi-topic records, blank lines between paragraphs, and backticks for paths/commands. Preserve facts and uncertainty."
+            ),
+        ] = None,
+        append_content: Annotated[
+            str | None,
+            Field(
+                description="Append Markdown as a separate paragraph or section. Use focused bullets for multiple points; preserve facts and uncertainty."
+            ),
+        ] = None,
         status: Annotated[Status | None, Field(description="New status, e.g. 'resolved'.")] = None,
         metadata: Annotated[
             dict[str, Any] | None, Field(description="Metadata keys to set (merged).")

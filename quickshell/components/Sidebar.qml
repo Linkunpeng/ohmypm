@@ -20,18 +20,20 @@ ColumnLayout {
         signal clicked
 
         width: ListView.view ? ListView.view.width : parent.width
-        height: 64
+        height: Math.max(64, entryRow.implicitHeight + 20)
         radius: 12
         color: chosen ? Style.withAlpha(Style.accent, 0.32) : mouse.containsMouse ? Style.wellHover : "transparent"
         Behavior on color { ColorAnimation { duration: 120 } }
 
         RowLayout {
+            id: entryRow
             anchors.fill: parent
             anchors.leftMargin: 10
             anchors.rightMargin: 12
             spacing: 12
 
             IconTile {
+                visible: entry.width >= Style.px(170)
                 glyph: entry.glyph
                 size: 40
                 strong: entry.chosen
@@ -47,7 +49,7 @@ ColumnLayout {
                         width: Math.min(implicitWidth, parent.width - 14)
                         text: entry.title
                         color: entry.dim ? Style.inactive : Style.text
-                        font.pixelSize: 14
+                        font.pixelSize: Style.px(14)
                     }
                     Rectangle {
                         visible: entry.recent
@@ -64,24 +66,25 @@ ColumnLayout {
                     text: entry.subtitle
                     color: Style.inactive
                     font.bold: false
-                    font.pixelSize: 11
+                    font.pixelSize: Style.px(11)
                 }
             }
             ColumnLayout {
+                visible: entry.width >= Style.px(260)
                 spacing: 3
                 BarText {
                     Layout.alignment: Qt.AlignRight
                     text: entry.time
                     color: Style.inactive
                     font.bold: false
-                    font.pixelSize: 11
+                    font.pixelSize: Style.px(11)
                 }
                 BarText {
                     Layout.alignment: Qt.AlignRight
                     visible: entry.issues > 0
                     text: Style.type("issue").glyph + " " + entry.issues
                     color: Style.urgent
-                    font.pixelSize: 11
+                    font.pixelSize: Style.px(11)
                 }
             }
         }
@@ -126,7 +129,7 @@ ColumnLayout {
                 bottomPadding: 6
                 text: "项目 (" + Memory.projects.length + ")"
                 color: Style.inactive
-                font.pixelSize: 13
+                font.pixelSize: Style.px(13)
             }
         }
 

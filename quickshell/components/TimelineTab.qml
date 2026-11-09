@@ -109,6 +109,6 @@ Page {
         text: "这里显示最近 " + page.view.recent.length + " 条，完整时间线在 Web UI 中查看。"
         color: Style.inactive
         font.bold: false
-        font.pixelSize: 12
+        font.pixelSize: Style.px(12)
     }
 }

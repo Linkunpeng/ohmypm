@@ -5,6 +5,7 @@ pragma Singleton
 // `omh theme apply`). Without ohmyhypr the builtin palette below is used.
 
 import QtQuick
+import QtCore
 import Quickshell
 import Quickshell.Io
 
@@ -24,7 +25,33 @@ Singleton {
 
     // Bar metrics and colors (waybar "[Dark] Latte-Wallust combined").
     readonly property string font: "JetBrainsMono Nerd Font"
-    readonly property int fontSize: 13
+    readonly property real fontScale: Math.max(1, Math.min(2, Number.isFinite(preferences.fontScale) ? preferences.fontScale : 1))
+    readonly property int fontPercent: Math.round(fontScale * 100)
+    readonly property int fontSize: px(13)
+    readonly property string preferencesPath: (Quickshell.env("OHMYPM_CONFIG_DIR") || Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config")
+        + (Quickshell.env("OHMYPM_CONFIG_DIR") ? "" : "/ohmypm") + "/quickshell.ini"
+
+    // Use a panel-specific file so preferences are not shared with other qs configs.
+    Settings {
+        id: preferences
+        location: Qt.resolvedUrl(root.preferencesPath)
+        property real fontScale: 1
+    }
+
+    function px(size: real): int {
+        return Math.round(size * fontScale);
+    }
+
+    function changeFontSize(step: int): void {
+        setFontScale((fontPercent + step * 10) / 100);
+    }
+
+    function setFontScale(scale: real): void {
+        if (!Number.isFinite(scale))
+            return;
+        preferences.fontScale = Math.max(1, Math.min(2, Math.round(scale * 10) / 10));
+        preferences.sync();
+    }
     readonly property int radius: 15
     readonly property int padding: 6
     readonly property color box: Qt.rgba(1 / 255, 1 / 255, 1 / 255, 0.82)   // bar boxes are 0.5; paragraphs need more

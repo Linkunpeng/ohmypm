@@ -41,32 +41,39 @@ ColumnLayout {
         search.reset();
     }
 
-    RowLayout {
+    GridLayout {
         Layout.fillWidth: true
         Layout.topMargin: 4
-        spacing: 16
+        columns: root.width >= Style.px(700) ? 2 : 1
+        columnSpacing: 16
+        rowSpacing: 16
 
-        IconTile {
-            glyph: Style.glyphs.folder
-            size: 60
-        }
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-            BarText {
-                Layout.fillWidth: true
-                text: root.project?.name ?? ""
-                font.pixelSize: 24
-            }
-            BarText {
-                Layout.fillWidth: true
-                text: Style.home(root.project?.root_path ?? "")
-                color: Style.inactive
-                font.bold: false
-            }
-        }
         RowLayout {
-            spacing: 32
+            Layout.fillWidth: true
+            spacing: 16
+            IconTile {
+                glyph: Style.glyphs.folder
+                size: 60
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                BarText {
+                    Layout.fillWidth: true
+                    text: root.project?.name ?? ""
+                    font.pixelSize: Style.px(24)
+                }
+                BarText {
+                    Layout.fillWidth: true
+                    text: Style.home(root.project?.root_path ?? "")
+                    color: Style.inactive
+                    font.bold: false
+                }
+            }
+        }
+        Flow {
+            Layout.fillWidth: true
+            spacing: 24
             StatColumn {
                 glyph: Style.glyphs.summary
                 value: root.project?.entry_count ?? 0
@@ -95,14 +102,14 @@ ColumnLayout {
         elide: Text.ElideNone
     }
 
-    // Tabs, with the project actions on the right.
-    Item {
+    // Wrap tabs and actions as the font grows or the tiled window narrows.
+    ColumnLayout {
         Layout.fillWidth: true
         Layout.topMargin: 16
-        Layout.preferredHeight: 46
+        spacing: 6
 
-        Row {
-            height: parent.height
+        Flow {
+            Layout.fillWidth: true
             spacing: 4
             Repeater {
                 model: root.tabs
@@ -112,7 +119,7 @@ ColumnLayout {
                     required property int index
                     readonly property bool chosen: index === root.tab
                     width: tabLabel.implicitWidth + 30
-                    height: parent.height
+                    height: Math.max(46, tabLabel.implicitHeight + 20)
 
                     Row {
                         id: tabLabel
@@ -121,12 +128,12 @@ ColumnLayout {
                         BarText {
                             text: tabItem.modelData.glyph
                             color: tabItem.chosen ? Style.accent : Style.inactive
-                            font.pixelSize: 15
+                            font.pixelSize: Style.px(15)
                         }
                         BarText {
                             text: tabItem.modelData.title
                             color: tabItem.chosen || tabMouse.containsMouse ? Style.text : Style.inactive
-                            font.pixelSize: 14
+                            font.pixelSize: Style.px(14)
                         }
                     }
                     Rectangle {
@@ -148,17 +155,15 @@ ColumnLayout {
             }
         }
 
-        Row {
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
+        Flow {
+            Layout.fillWidth: true
             spacing: 8
             ActionButton { glyph: Style.glyphs.terminal; text: "终端"; onClicked: Memory.openTerminal() }
             ActionButton { glyph: Style.glyphs.copy; text: "复制上下文"; onClicked: Memory.copyContext() }
         }
 
         Divider {
-            anchors.bottom: parent.bottom
-            width: parent.width
+            Layout.fillWidth: true
         }
     }
 

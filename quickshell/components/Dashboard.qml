@@ -14,30 +14,37 @@ Page {
         return Memory.activity.filter(e => e.project_id === id);
     }
 
-    RowLayout {
+    GridLayout {
         width: parent.width
-        spacing: 16
+        columns: root.width >= Style.px(700) ? 2 : 1
+        columnSpacing: 16
+        rowSpacing: 16
 
-        IconTile {
-            glyph: Style.glyphs.dashboard
-            size: 60
-        }
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 4
-            BarText {
-                text: "总览"
-                font.pixelSize: 24
-            }
-            BarText {
-                Layout.fillWidth: true
-                text: Memory.projects.length + " 个项目，" + root.activeProjects + " 个近 7 天有新记录"
-                color: Style.inactive
-                font.bold: false
-            }
-        }
         RowLayout {
-            spacing: 32
+            Layout.fillWidth: true
+            spacing: 16
+            IconTile {
+                glyph: Style.glyphs.dashboard
+                size: 60
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                BarText {
+                    text: "总览"
+                    font.pixelSize: Style.px(24)
+                }
+                BarText {
+                    Layout.fillWidth: true
+                    text: Memory.projects.length + " 个项目，" + root.activeProjects + " 个近 7 天有新记录"
+                    color: Style.inactive
+                    font.bold: false
+                }
+            }
+        }
+        Flow {
+            Layout.fillWidth: true
+            spacing: 24
             StatColumn {
                 glyph: Style.glyphs.summary
                 value: root.totalRecords
@@ -70,7 +77,7 @@ Page {
 
     GridLayout {
         width: parent.width
-        columns: root.width >= 860 ? 2 : 1
+        columns: root.width >= Style.px(860) ? 2 : 1
         columnSpacing: 16
         rowSpacing: 16
 
@@ -106,7 +113,7 @@ Page {
                 text: "另有 " + (Memory.openIssueItems.length - 6) + " 个，在各项目中查看"
                 color: Style.inactive
                 font.bold: false
-                font.pixelSize: 12
+                font.pixelSize: Style.px(12)
             }
         }
 
@@ -146,7 +153,7 @@ Page {
 
         GridLayout {
             width: parent.width
-            columns: Math.max(1, Math.floor((width + 10) / (240 + 10)))
+            columns: Math.max(1, Math.floor((width + 10) / (Style.px(280) + 10)))
             columnSpacing: 10
             rowSpacing: 10
             Repeater {

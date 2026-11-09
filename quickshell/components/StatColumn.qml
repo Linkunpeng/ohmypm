@@ -10,7 +10,7 @@ Column {
     property string label
     spacing: 3
 
-    BarText { text: root.glyph; color: root.tint; font.pixelSize: 16 }
-    BarText { text: root.value; font.pixelSize: 20 }
-    BarText { text: root.label; color: Style.inactive; font.bold: false; font.pixelSize: 11 }
+    BarText { text: root.glyph; color: root.tint; font.pixelSize: Style.px(16) }
+    BarText { text: root.value; font.pixelSize: Style.px(20) }
+    BarText { text: root.label; color: Style.inactive; font.bold: false; font.pixelSize: Style.px(11) }
 }

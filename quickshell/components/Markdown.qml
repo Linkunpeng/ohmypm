@@ -8,7 +8,7 @@ Text {
     color: Style.text
     linkColor: Style.accent
     font.family: Style.font
-    font.pixelSize: 13
+    font.pixelSize: Style.px(13)
     lineHeight: 1.2
     onLinkActivated: link => Qt.openUrlExternally(link)
 }

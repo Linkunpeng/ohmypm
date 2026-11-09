@@ -61,48 +61,54 @@ Item {
             width: parent.width
             spacing: 10
             BarText {
-                Layout.preferredWidth: 20
+                Layout.preferredWidth: Style.px(20)
                 text: root.kind.glyph
                 color: root.kind.color
-                font.pixelSize: 15
-            }
-            BarText {
-                visible: root.projectName !== ""
-                Layout.maximumWidth: 140
-                text: root.projectName
-                color: Style.accent
-                font.pixelSize: 12
+                font.pixelSize: Style.px(15)
             }
             BarText {
                 Layout.fillWidth: true
                 text: root.record.title
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+            }
+        }
+
+        Flow {
+            x: Style.px(20) + 10
+            width: parent.width - x
+            spacing: 6
+            BarText {
+                visible: root.projectName !== ""
+                width: Math.min(implicitWidth, parent.width)
+                text: root.projectName
+                color: Style.accent
+                font.pixelSize: Style.px(12)
             }
             Pill { visible: root.hypothesis; text: "待验证"; tint: Style.gold }
             Pill { visible: root.showStatus && root.status !== null; text: root.status?.text ?? ""; tint: root.status?.color ?? Style.inactive }
             Pill { visible: root.showType; text: root.kind.label; tint: root.kind.color }
             BarText {
-                Layout.minimumWidth: 86
-                horizontalAlignment: Text.AlignRight
                 text: Style.when(root.record.created_at)
                 color: Style.inactive
                 font.bold: false
-                font.pixelSize: 12
+                font.pixelSize: Style.px(12)
             }
         }
 
         BarText {
-            x: 30
-            width: parent.width - 30
+            x: Style.px(20) + 10
+            width: parent.width - x
             visible: root.showExcerpt && !root.expanded && text !== ""
             text: root.excerpt
             color: Style.inactive
             font.bold: false
-            font.pixelSize: 12
+            font.pixelSize: Style.px(12)
         }
 
         Markdown {
-            x: 30
-            width: parent.width - 30
+            x: Style.px(20) + 10
+            width: parent.width - x
             visible: root.expanded
             text: root.body || "_（没有正文）_"
             topPadding: 4

@@ -32,26 +32,27 @@ Rectangle {
             text: Style.home(root.project.root_path)
             color: Style.inactive
             font.bold: false
-            font.pixelSize: 11
+            font.pixelSize: Style.px(11)
         }
-        Row {
+        Flow {
+            width: parent.width
             spacing: 10
             BarText {
                 text: root.project.entry_count + " 条记录"
                 font.bold: false
-                font.pixelSize: 12
+                font.pixelSize: Style.px(12)
             }
             BarText {
                 visible: root.issues > 0
                 text: Style.type("issue").glyph + " " + root.issues
                 color: Style.urgent
-                font.pixelSize: 12
+                font.pixelSize: Style.px(12)
             }
             BarText {
                 text: Style.ago(root.project.last_activity_at)
                 color: Style.inactive
                 font.bold: false
-                font.pixelSize: 12
+                font.pixelSize: Style.px(12)
             }
         }
         Sparkline {

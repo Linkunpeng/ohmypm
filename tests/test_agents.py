@@ -28,7 +28,7 @@ def manager(settings, home: Path) -> AgentManager:
 
 
 def make_agent_homes(home: Path) -> None:
-    for d in (".claude", ".codex", ".pi/agent", ".dsh"):
+    for d in (".claude", ".codex", ".pi/agent", ".dsh", ".gemini/config"):
         (home / d).mkdir(parents=True, exist_ok=True)
 
 
@@ -103,7 +103,13 @@ def test_update_skips_agents_without_block(manager: AgentManager, home: Path) ->
     make_agent_homes(home)
     manager.install(["codex"])
     changes = {c.agent: c.action for c in manager.update()}
-    assert changes == {"claude": "skipped", "codex": "unchanged", "pi": "skipped", "dsh": "skipped"}
+    assert changes == {
+        "claude": "skipped",
+        "codex": "unchanged",
+        "pi": "skipped",
+        "dsh": "skipped",
+        "agy": "skipped",
+    }
     assert not (home / ".claude" / "CLAUDE.md").exists()
 
 
@@ -237,6 +243,40 @@ def test_unknown_agent(manager: AgentManager) -> None:
 
     with pytest.raises(ValidationError):
         manager.install(["vim"])
+
+
+def test_agy_global_rules_lifecycle(manager: AgentManager, home: Path) -> None:
+    # The CLI on PATH is enough to detect agy before its config directory exists.
+    manager.which = lambda name: "/usr/bin/agy" if name == "agy" else None
+    path = home / ".gemini" / "config" / "AGENTS.md"
+    other_rules = home / ".gemini" / "AGENTS.md"
+    other_rules.parent.mkdir(parents=True)
+    other_rules.write_text("# Personal rules\nKeep these too.\n")
+    original = "# Global rules\n\nPreserve this content.\n"
+
+    planned = manager.install(["agy"], dry_run=True)
+    assert planned[0].action == "installed" and planned[0].target == str(path)
+    assert not path.exists()
+    path.parent.mkdir(parents=True)
+    path.write_text(original)
+
+    installed = manager.install(["agy"])[0]
+    assert installed.action == "installed"
+    assert installed.backup and Path(installed.backup).read_text() == original
+    assert path.read_text().startswith(original)
+    assert DEFAULT_INSTRUCTIONS in path.read_text()
+    assert manager.status(["agy"])[0].state == "installed"
+    assert manager.install(["agy"])[0].action == "unchanged"
+
+    manager.instructions_path.write_text("# Updated memory rules\nUse structured Markdown.\n")
+    assert manager.status(["agy"])[0].state == "outdated"
+    assert manager.update(["agy"])[0].action == "updated"
+    assert "Use structured Markdown." in path.read_text()
+    assert path.read_text().count(START_PREFIX) == 1
+
+    assert manager.remove(["agy"])[0].action == "removed"
+    assert path.read_text() == original
+    assert other_rules.read_text() == "# Personal rules\nKeep these too.\n"
 
 
 def test_agents_cli(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:

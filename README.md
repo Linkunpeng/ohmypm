@@ -54,7 +54,7 @@ ohmypm search "链接失败"            # 全文检索，支持中文
 ## 让 Agent 使用 ohmypm
 
 ```bash
-ohmypm agents install      # 写入 Claude Code / Codex / Pi / DSH 的全局指令
+ohmypm agents install      # 写入 Claude Code / Codex / Pi / DSH / agy 的全局指令
 ohmypm agents status       # 查看每个 Agent 读取哪个文件、是否已安装
 ohmypm agents update       # 修改 ~/.config/ohmypm/agent-instructions.md 后同步
 ohmypm agents remove       # 只移除 ohmypm 区块，保留你的其他内容
@@ -66,8 +66,9 @@ ohmypm agents remove       # 只移除 ohmypm 区块，保留你的其他内容
 | Codex | `~/.codex/AGENTS.override.md` 或 `AGENTS.md`（`$CODEX_HOME`） | 内联区块 |
 | Pi | `~/.pi/agent/` 下的 `AGENTS.md` 等（`$PI_CODING_AGENT_DIR`） | 内联区块 |
 | DSH | `~/.dsh/AGENTS.md`（`$DSH_HOME`） | 内联区块 |
+| Antigravity CLI (`agy`) | `~/.gemini/config/AGENTS.md` | 全局规则中的内联区块 |
 
-以上位置已在本机安装的版本上实测验证（`scripts/verify_agents.py`）。细节见 [docs/agents.md](docs/agents.md)。
+Claude Code / Codex / Pi / DSH 已在本机安装的版本上实测验证（`scripts/verify_agents.py`）；agy 的位置按本机内置说明和官方全局规则文档核对。细节见 [docs/agents.md](docs/agents.md)。
 
 ## MCP
 

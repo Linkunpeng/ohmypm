@@ -36,6 +36,10 @@ qs -p quickshell ipc call ohmypm select Robot_WS   # 切换到某个项目
 
 点击一条记录可展开完整正文。
 
+标题栏的 **A+ / A−** 按 10% 调整整个面板的字号（100%–200%），侧栏、记录正文、Markdown 和搜索输入框同步变化。点击中间的百分比可恢复 100%。设置自动保存，重启后保留；按钮、标签和卡片布局会随字号调整，窄窗口中自动换行。
+
+字号偏好保存在 `${OHMYPM_CONFIG_DIR:-${XDG_CONFIG_HOME:-~/.config}/ohmypm}/quickshell.ini`。
+
 ## Hyprland 绑定
 
 ohmyhypr 的机器本地配置 `hypr/lua/omh/local.lua`（`setup` 中）：
@@ -53,7 +57,7 @@ hl.on("hyprland.start", function() hl.exec_cmd(ohmypm_panel .. " start") end)
 | `OHMYPM_BIN` | ohmypm 可执行文件（默认在 `PATH` 中查找；`toggle.sh` 会补上 `~/.local/bin`） |
 | `OHMYPM_DATA_DIR` / `OHMYPM_CONFIG_DIR` | 与 CLI 相同，例如用 `scripts/seed_demo.py` 的演示数据调试 |
 | `OHMYPM_WEB_PORT` | Web UI 端口（默认 8737） |
-| `TERMINAL` | `t` 打开的终端 |
+| `TERMINAL` | “终端”按钮使用的终端 |
 
 ## 文件
 

@@ -17,6 +17,8 @@ Verified locations (checked against the installed tools, 2026-11-04):
   first existing of AGENTS.override.md, AGENTS.md, AGENTS.MD, CLAUDE.md,
   CLAUDE.MD. Inline copy.
 * DSH 0.2          - ``$DSH_HOME/AGENTS.md`` (default ``~/.dsh``). Inline copy.
+* Antigravity CLI  - ``~/.gemini/config/AGENTS.md`` (global rules;
+  bundled customization guide and official discovery docs, 2026-11-09).
 
 Project-level instruction files are never modified.
 """
@@ -53,7 +55,7 @@ State = Literal["installed", "outdated", "not_installed", "not_detected", "inact
 class AgentSpec:
     key: str
     label: str
-    env_var: str
+    env_var: str | None
     default_home: Callable[[Path], Path]
     candidates: tuple[str, ...]  # in the agent's own precedence order
     fallback: str  # file to create when none exists
@@ -62,7 +64,7 @@ class AgentSpec:
     verified_with: str
 
     def home(self, env: Mapping[str, str], user_home: Path) -> Path:
-        value = env.get(self.env_var)
+        value = env.get(self.env_var) if self.env_var else None
         return Path(value).expanduser() if value else self.default_home(user_home)
 
     def active_file(self, home: Path) -> Path:
@@ -119,6 +121,17 @@ AGENTS: dict[str, AgentSpec] = {
             binaries=("dsh",),
             mode="inline",
             verified_with="@deepseek-ai/dsh 0.2.0-rc.2 (dsh-agent-instructions: $DSH_HOME/AGENTS.md)",
+        ),
+        AgentSpec(
+            key="agy",
+            label="Antigravity",
+            env_var=None,
+            default_home=lambda h: h / ".gemini" / "config",
+            candidates=("AGENTS.md",),
+            fallback="AGENTS.md",
+            binaries=("agy",),
+            mode="inline",
+            verified_with="Antigravity CLI global rules (bundled guide + official discovery docs, 2026-11-09)",
         ),
     )
 }

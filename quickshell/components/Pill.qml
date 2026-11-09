@@ -12,7 +12,7 @@ Rectangle {
     signal clicked
 
     implicitWidth: row.implicitWidth + 18
-    implicitHeight: 24
+    implicitHeight: Math.max(24, row.implicitHeight + 8)
     radius: height / 2
     color: Style.withAlpha(tint, selected ? 0.36 : mouse.containsMouse ? 0.26 : 0.14)
     border.width: selected ? 1 : 0
@@ -22,8 +22,8 @@ Rectangle {
         id: row
         anchors.centerIn: parent
         spacing: 5
-        BarText { text: root.glyph; color: root.tint; font.pixelSize: 11; visible: text !== "" }
-        BarText { text: root.text; color: root.tint; font.pixelSize: 11; visible: text !== "" }
+        BarText { text: root.glyph; color: root.tint; font.pixelSize: Style.px(11); visible: text !== "" }
+        BarText { text: root.text; color: root.tint; font.pixelSize: Style.px(11); visible: text !== "" }
     }
 
     MouseArea {

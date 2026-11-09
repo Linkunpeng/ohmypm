@@ -5,7 +5,7 @@ import Quickshell.Hyprland
 import "components"
 import "services"
 
-// An ordinary toplevel window, so Hyprland tiles it next to the others. Esc hides it.
+// An ordinary toplevel window, so Hyprland tiles it next to the others.
 FloatingWindow {
     id: root
 
@@ -98,25 +98,31 @@ FloatingWindow {
             // Title bar
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 64
+                Layout.preferredHeight: Math.max(64, Style.px(28) + 24)
                 Layout.leftMargin: 22
                 Layout.rightMargin: 18
-                spacing: 14
+                spacing: 8
 
-                BarText { text: Style.glyphs.brain; color: Style.accent; font.pixelSize: 26 }
-                BarText { text: "ohmypm"; font.pixelSize: 20 }
-                Divider { vertical: true; Layout.preferredHeight: 22 }
-                BarText { text: "项目记忆 · 开发记录"; color: Style.inactive; font.bold: false; font.pixelSize: 14 }
+                BarText { text: Style.glyphs.brain; color: Style.accent; font.pixelSize: Style.px(26); visible: root.width >= Style.px(700) }
+                BarText { text: "ohmypm"; font.pixelSize: Style.px(20) }
+                Divider { vertical: true; Layout.preferredHeight: 22; visible: subtitle.visible }
+                BarText { id: subtitle; text: "项目记忆 · 开发记录"; color: Style.inactive; font.bold: false; font.pixelSize: Style.px(14); visible: root.width >= Style.px(1050) }
                 Item { Layout.fillWidth: true }
                 BarText {
+                    Layout.fillWidth: Memory.flash !== ""
                     text: Memory.flash || (Memory.loading ? "读取中…" : Memory.refreshedAt ? Qt.formatTime(Memory.refreshedAt, "HH:mm") + " 更新" : "")
                     color: Memory.flash ? Style.teal : Style.inactive
                     font.bold: Memory.flash !== ""
-                    font.pixelSize: 12
+                    font.pixelSize: Style.px(12)
+                    visible: Memory.flash !== "" || root.width >= Style.px(950)
                 }
-                ActionButton { glyph: Style.glyphs.search; visible: !Memory.onDashboard; onClicked: root.search() }
-                ActionButton { glyph: Style.glyphs.external; onClicked: Memory.openWeb() }
-                ActionButton { glyph: Style.glyphs.refresh; onClicked: Memory.refresh(false) }
+                ActionButton { text: "A−"; tooltip: "缩小字体"; enabled: Style.fontPercent > 100; onClicked: Style.changeFontSize(-1) }
+                ActionButton { text: Style.fontPercent + "%"; tooltip: "恢复默认字号"; onClicked: Style.setFontScale(1) }
+                ActionButton { text: "A+"; tooltip: "放大字体"; enabled: Style.fontPercent < 200; onClicked: Style.changeFontSize(1) }
+                Divider { vertical: true; Layout.preferredHeight: 22 }
+                ActionButton { glyph: Style.glyphs.search; tooltip: "搜索项目记录"; visible: !Memory.onDashboard; onClicked: root.search() }
+                ActionButton { glyph: Style.glyphs.external; tooltip: "打开 Web UI"; onClicked: Memory.openWeb() }
+                ActionButton { glyph: Style.glyphs.refresh; tooltip: "刷新"; onClicked: Memory.refresh(false) }
             }
 
             Divider { Layout.fillWidth: true }
@@ -128,7 +134,7 @@ FloatingWindow {
 
                 Sidebar {
                     Layout.fillWidth: false
-                    Layout.preferredWidth: Math.min(300, root.width * 0.3)
+                    Layout.preferredWidth: Math.min(Style.px(300), root.width * 0.3)
                     Layout.fillHeight: true
                     Layout.margins: 12
                     Layout.bottomMargin: 14
@@ -167,7 +173,7 @@ FloatingWindow {
                             width: parent.width
                             horizontalAlignment: Text.AlignHCenter
                             text: Memory.error ? "读不到 ohmypm 数据" : "还没有注册项目"
-                            font.pixelSize: 18
+                            font.pixelSize: Style.px(18)
                         }
                         BarText {
                             width: parent.width

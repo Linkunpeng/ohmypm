@@ -1,6 +1,6 @@
 """Default global agent instructions (installed to ~/.config/ohmypm/agent-instructions.md)."""
 
-TEMPLATE_VERSION = 1
+TEMPLATE_VERSION = 2
 
 DEFAULT_INSTRUCTIONS = """\
 # ohmypm — project memory
@@ -23,7 +23,21 @@ id explicitly). If `ohmypm` is missing or fails, continue your work without it.
 
 ```bash
 ohmypm log add --type <type> --title "<specific title>" --author <agent-name> --stdin <<'EOF'
-<concise Markdown>
+## Result
+
+- <what was completed or confirmed>
+
+## Changes
+
+- <one meaningful change per item; name relevant files>
+
+## Verification
+
+- <checks actually run and their results; state what was not verified>
+
+## Remaining work
+
+- <unresolved issues or the next step, if any>
 EOF
 ```
 
@@ -41,6 +55,26 @@ Mark unverified ideas as such (e.g. `--meta confidence=hypothesis`); never prese
 
 Do not record: simple commands, file reads, temporary debug output, repetitive
 intermediate states, or secrets of any kind (passwords, tokens, keys, credentials).
+
+## Write records for reading
+
+- Write the body in Markdown, using the user's language for both headings and text.
+  The example above is for a milestone; adapt it to the record rather than copying
+  placeholders or adding empty sections. A short record can be a short paragraph or list.
+- Split longer, multi-topic records into `##` sections and focused bullet points.
+  Milestones: result, changes, verification, remaining work. Issues: symptoms,
+  confirmed facts, attempted fixes (including failures), open questions and next steps.
+  Decisions: choice, rationale, alternatives or tradeoffs. Include only relevant sections.
+- Keep one main point per bullet or paragraph. Separate paragraphs with a blank line,
+  and leave blank lines around headings and lists. A single newline inside a paragraph
+  is not a paragraph break in Markdown; do not save a long wall of text.
+- Put file paths, commands, API names and identifiers in backticks; use fenced code
+  blocks with a language tag for multi-line commands or logs when they are needed.
+- Preserve exact technical facts, results and uncertainty. Do not invent verification,
+  omit failures or turn an unverified hypothesis into a conclusion for cleaner formatting.
+  When appending an update, add a clearly separated paragraph or section.
+- Before saving, check that a reader can quickly find the outcome, supporting evidence
+  and any remaining work without reading one dense paragraph.
 
 ## At the end of a work phase
 

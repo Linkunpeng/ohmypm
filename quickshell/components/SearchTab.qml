@@ -48,7 +48,7 @@ Page {
 
     Rectangle {
         width: parent.width
-        height: 46
+        height: Math.max(46, input.implicitHeight + 24)
         radius: 12
         color: Style.well
         border.width: 1
@@ -60,7 +60,7 @@ Page {
             anchors.verticalCenter: parent.verticalCenter
             text: Style.glyphs.search
             color: input.activeFocus ? Style.accent : Style.inactive
-            font.pixelSize: 16
+            font.pixelSize: Style.px(16)
         }
         TextInput {
             id: input
@@ -72,7 +72,7 @@ Page {
             color: Style.text
             selectionColor: Style.withAlpha(Style.accent, 0.5)
             font.family: Style.font
-            font.pixelSize: 14
+            font.pixelSize: Style.px(14)
             clip: true
             onTextChanged: debounce.restart()
             Keys.onReturnPressed: page.run()
@@ -84,7 +84,7 @@ Page {
                 text: "搜索记录和摘要，支持中文和 \"短语\""
                 color: Style.inactive
                 font.bold: false
-                font.pixelSize: 14
+                font.pixelSize: Style.px(14)
             }
         }
     }
@@ -97,7 +97,7 @@ Page {
             : "输入关键词，搜索这个项目的记录和摘要。"
         color: page.error ? Style.urgent : Style.inactive
         font.bold: false
-        font.pixelSize: 12
+        font.pixelSize: Style.px(12)
     }
 
     Column {
@@ -135,7 +135,7 @@ Page {
                             spacing: 6
                             Row {
                                 spacing: 10
-                                BarText { text: Style.glyphs.summary; color: Style.accent; font.pixelSize: 15 }
+                                BarText { text: Style.glyphs.summary; color: Style.accent; font.pixelSize: Style.px(15) }
                                 BarText { text: "项目摘要" }
                             }
                             BarText {
@@ -144,7 +144,7 @@ Page {
                                 text: Style.plain(modelData.snippet ?? "")
                                 color: Style.inactive
                                 font.bold: false
-                                font.pixelSize: 12
+                                font.pixelSize: Style.px(12)
                             }
                         }
                         MouseArea {

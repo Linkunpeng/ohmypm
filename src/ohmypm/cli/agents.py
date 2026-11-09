@@ -9,13 +9,13 @@ import typer
 from ohmypm.cli.common import JsonOpt, emit_json, get_service, out
 
 agents_app = typer.Typer(
-    help="Install ohmypm usage instructions into the global config of Codex, Claude Code, Pi and DSH.",
+    help="Install ohmypm usage instructions into the global config of Codex, Claude Code, Pi, DSH and Antigravity (agy).",
     no_args_is_help=True,
 )
 
 AgentOpt = Annotated[
     list[str] | None,
-    typer.Option("--agent", "-a", help="claude | codex | pi | dsh | all (default: all). Repeatable."),
+    typer.Option("--agent", "-a", help="claude | codex | pi | dsh | agy | all (default: all). Repeatable."),
 ]
 DryRunOpt = Annotated[bool, typer.Option("--dry-run", help="Show what would change without writing.")]
 
