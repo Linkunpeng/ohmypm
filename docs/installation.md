@@ -44,6 +44,7 @@ cd frontend && pnpm install && pnpm dev   # 前端开发服务器，/api 代理�
 ```toml
 [ohmypm]
 author = "lkp"                 # Web/CLI 记录的默认作者（CLI 也可用 --author 或 OHMYPM_AUTHOR）
+author_aliases = { "codex cli" = "codex" }   # 作者名别名（先转小写再匹配），补充内置别名
 
 [web]
 host = "127.0.0.1"

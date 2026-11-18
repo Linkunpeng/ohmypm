@@ -66,6 +66,35 @@ ohmypm log deleted                     # 已删除但可找回的记录
 
 类型：`note`、`milestone`、`issue`、`decision`、`knowledge`、`artifact`（以及 `config.toml` 中的扩展类型）。状态：`open`、`resolved`、`obsolete`；`issue` 默认 `open`，`obsolete` 的记录不进入上下文。
 
+### 标签与关联
+
+```bash
+ohmypm log add -T issue -t "相册缩略图慢" --tag lvgl --tag device:a0ac1sn14a00013 -c "…"
+ohmypm log add -T milestone -t "缩略图预加载" --fixes 12 --relates 8 -c "…"   # #12 标为 resolved
+ohmypm log add -T knowledge -t "新部署流程" --supersedes 5 -c "…"             # #5 标为 obsolete
+ohmypm log edit 12 --tag gallery --untag lvgl
+ohmypm log edit 20 --relates 15 --unlink 8   # --unlink 只删除显式关联，不改状态
+ohmypm log list --tag lvgl --tag gallery     # 同时带有全部标签
+ohmypm search 缩略图 --tag lvgl
+ohmypm context --tag lvgl                     # 只看带该标签的记录，摘要不过滤
+ohmypm tags [--all]                           # 使用中的标签及记录数
+```
+
+- **标签**：统一转为小写，不能包含空格；可用字母（含中文）、数字和 `_ - . : /  +`，以字母或数字开头，最长 64 个字符，每条记录最多 20 个。可以用 `key:value` 表示维度，例如 `device:…`、`v3.6.0`。标签修改会产生修订，`log restore` 时一并恢复。
+- **关联**：只能指向同一项目的记录。`--fixes N` 要求 N 是 issue，并在它处于 open 时标为 resolved；`--supersedes N` 把 N 标为 obsolete。这两种状态变化都是正常编辑，会保留修订。`--relates N` 只建立关联。
+- **自动提及**：正文中的 `#N`（代码块和行内代码除外）会自动关联到第 N 条记录，正文修改后重新计算。升级数据库时会为已有记录补建这类关联。
+- `log show` 显示双向关联（如 `fixes: #12`、`fixed by: #20`、`mentioned in: #31`）。context 在每条记录下列出 `_Links: …_`，并在开头列出使用中的标签。
+- 关联本身不产生修订；删除任一端的记录时，关联一并删除。
+
+### 作者名
+
+写入时作者名会去掉首尾空白、转为小写，再按别名表映射。内置别名：`claude` / `claude code` → `claude-code`，`antigravity` → `agy`。可以在 `config.toml` 的 `[ohmypm] author_aliases` 中补充。已有记录可以批量整理：
+
+```bash
+ohmypm log authors [--all-projects]           # 各作者名的记录数，以及将改成的名称
+ohmypm log authors --all-projects --apply     # 原地改写：不产生修订，不改变更新时间
+```
+
 ## 摘要（summary）
 
 摘要文档用二级标题划分小节，标题可用英文或中文别名：

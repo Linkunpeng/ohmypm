@@ -33,6 +33,15 @@ TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 EntryStatus = Literal["open", "resolved", "obsolete"]
 
+# Links set explicitly; "mentions" are derived from "#N" in the body.
+LINK_KINDS = ("relates", "fixes", "supersedes")
+ALL_LINK_KINDS = (*LINK_KINDS, "mentions")
+LinkKind = Literal["relates", "fixes", "supersedes"]
+MAX_TAGS = 20
+MAX_TAG_CHARS = 64
+# Letters (any script), digits and "_" first; then also "-", ".", ":", "/", "+".
+_TAG_RE = re.compile(r"^[^\W][\w.:/+-]*$")
+
 
 def _clean_title(value: str) -> str:
     value = " ".join(value.split())
@@ -59,6 +68,24 @@ def _check_metadata(value: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+def clean_tag(value: str) -> str:
+    """Normalise one tag: trimmed, lowercase, no whitespace, e.g. ``device:a0ac1``."""
+    tag = value.strip().lower()
+    if not tag or len(tag) > MAX_TAG_CHARS or not _TAG_RE.match(tag):
+        raise ValueError(
+            f"invalid tag '{value}': use letters, digits and _ - . : / + (max {MAX_TAG_CHARS} characters, "
+            "no spaces), e.g. 'lvgl' or 'device:a0ac1sn14a00013'"
+        )
+    return tag
+
+
+def clean_tags(values: list[str]) -> list[str]:
+    tags = sorted({clean_tag(v) for v in values})
+    if len(tags) > MAX_TAGS:
+        raise ValueError(f"at most {MAX_TAGS} tags per entry")
+    return tags
+
+
 def _check_type(value: str) -> str:
     value = value.strip().lower()
     if not TYPE_PATTERN.match(value):
@@ -73,6 +100,15 @@ class _Model(BaseModel):
 # --------------------------------------------------------------------------- inputs
 
 
+class LinkIn(BaseModel):
+    """A link to set from an entry to ``target`` (``#12``, ``12`` or an entry id)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target: str
+    kind: LinkKind = "relates"
+
+
 class EntryCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -83,6 +119,13 @@ class EntryCreate(BaseModel):
     author: str | None = Field(default=None, max_length=200)
     source: str | None = Field(default=None, max_length=32)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(default_factory=list)
+    links: list[LinkIn] = Field(default_factory=list)
+
+    @field_validator("tags")
+    @classmethod
+    def _tags(cls, v: list[str]) -> list[str]:
+        return clean_tags(v)
 
     @field_validator("title")
     @classmethod
@@ -119,6 +162,23 @@ class EntryUpdate(BaseModel):
     status: EntryStatus | None = None
     clear_status: bool = False
     metadata: dict[str, Any] | None = None
+    # ``tags`` replaces all tags; ``add_tags`` / ``remove_tags`` change them.
+    tags: list[str] | None = None
+    add_tags: list[str] = Field(default_factory=list)
+    remove_tags: list[str] = Field(default_factory=list)
+    add_links: list[LinkIn] = Field(default_factory=list)
+    # Targets whose explicit links from this entry are removed (all kinds).
+    remove_links: list[str] = Field(default_factory=list)
+
+    @field_validator("tags")
+    @classmethod
+    def _tags(cls, v: list[str] | None) -> list[str] | None:
+        return None if v is None else clean_tags(v)
+
+    @field_validator("add_tags", "remove_tags")
+    @classmethod
+    def _tag_changes(cls, v: list[str]) -> list[str]:
+        return [clean_tag(t) for t in v]
 
     @field_validator("title")
     @classmethod
@@ -175,6 +235,15 @@ class ProjectOut(_Model):
     entry_count: int | None = None
 
 
+class LinkOut(_Model):
+    kind: str
+    entry_id: str
+    sequence: int
+    type: str
+    title: str
+    status: str | None
+
+
 class EntryOut(_Model):
     id: str
     project_id: str
@@ -191,6 +260,11 @@ class EntryOut(_Model):
     updated_at: datetime
     metadata: dict[str, Any]
     asset_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    # Outgoing links and incoming links ("backlinks"). Only loaded for single
+    # entries (show/add/edit); ``None`` in lists.
+    links: list[LinkOut] | None = None
+    backlinks: list[LinkOut] | None = None
 
 
 class EntryRevisionOut(_Model):
@@ -202,6 +276,7 @@ class EntryRevisionOut(_Model):
     title: str
     content: str
     status: str | None
+    tags: list[str] = Field(default_factory=list)
     reason: str
     changed_by: str | None
     created_at: datetime

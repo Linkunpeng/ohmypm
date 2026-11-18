@@ -227,7 +227,7 @@ def test_summary_commands(cli, workspace: Path, tmp_path: Path) -> None:
     assert (
         r["changed"]
         and r["summary"]["overview"] == "ROS2 工作空间"
-        and r["summary"]["updated_by"] == "claude"
+        and r["summary"]["updated_by"] == "claude-code"
     )
     cli("summary", "set", "--section", "known-issues", "--content", "- 丢帧", cwd=workspace, ok=False)
     cli("summary", "set", "--section", "Known Issues", "--content", "- 丢帧", cwd=workspace)
@@ -434,3 +434,41 @@ def test_project_context_settings(cli, workspace: Path) -> None:
     assert r.exit_code != 0 and "standard_tokens" in r.stderr
     status = js(cli("status", "--json", cwd=workspace))
     assert status["stale_open_issues"] == 0 and status["stale_issue_days"] == 7
+
+
+def test_tags_links_and_authors(cli, workspace: Path) -> None:
+    cli("register", cwd=workspace)
+    cli(
+        "log",
+        "add",
+        "-T",
+        "issue",
+        "-t",
+        "缩略图慢",
+        "-g",
+        "LVGL",
+        "-g",
+        "gallery",
+        "--author",
+        "Codex",
+        cwd=workspace,
+    )
+    added = cli(
+        "log", "add", "-T", "milestone", "-t", "预加载", "--fixes", "1", "-c", "见 #1", cwd=workspace
+    ).stdout
+    assert "fixes #1 缩略图慢  (marked resolved)" in added
+    shown = cli("log", "show", "1", cwd=workspace).stdout
+    assert "[issue · resolved]" in shown and "tags: gallery, lvgl" in shown and "fixed by: #2" in shown
+    assert "{gallery, lvgl}  (codex)" in cli("log", "list", "--tag", "lvgl", cwd=workspace).stdout
+    assert js(cli("log", "list", "--tag", "nothing", "--json", cwd=workspace))["total"] == 0
+    edited = js(cli("log", "edit", "2", "--tag", "ui", "--unlink", "1", "--json", cwd=workspace))
+    assert edited["entry"]["tags"] == ["ui"]
+    # The explicit link is gone; the "#1" mention in the body remains.
+    assert [(link["kind"], link["sequence"]) for link in edited["entry"]["links"]] == [("mentions", 1)]
+    assert js(cli("tags", "--json", cwd=workspace))[0] == {"tag": "gallery", "count": 1}
+    assert "缩略图慢" in cli("search", "缩略图", "--tag", "lvgl", cwd=workspace).stdout
+    assert "Filtered by tag `ui`" in cli("context", "--tag", "ui", cwd=workspace).stdout
+    authors = js(cli("log", "authors", "--json", cwd=workspace))
+    assert authors["authors"] == [{"author": "codex", "count": 1, "normalized": "codex"}]
+    r = cli("log", "add", "-t", "x", "--fixes", "2", cwd=workspace, ok=False)
+    assert r.exit_code != 0 and "needs an issue" in r.stderr

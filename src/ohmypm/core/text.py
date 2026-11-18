@@ -131,3 +131,28 @@ def demote_headings(markdown: str, levels: int) -> str:
 
 def asset_refs(markdown: str) -> set[str]:
     return {m.lower() for m in ASSET_REF_RE.findall(markdown or "")}
+
+
+# "#12" references to other records of the same project. Not after a word
+# character, "&" (HTML entities), "/" (URL fragments) or another "#"; CJK text
+# may directly precede or follow the number ("见#12的结论").
+_MENTION_RE = re.compile(r"(?<![0-9A-Za-z_#&/])#(\d{1,7})(?![0-9A-Za-z_])")
+_INLINE_CODE_RE = re.compile(r"(`+).*?\1")
+
+
+def entry_mentions(markdown: str) -> set[int]:
+    """Sequence numbers referenced as ``#N``, ignoring code blocks and inline code."""
+    found: set[int] = set()
+    fence: str | None = None
+    for line in (markdown or "").split("\n"):
+        match = _FENCE_RE.match(line)
+        if match:
+            marker = match.group(1)
+            if fence is None:
+                fence = marker[0] * 3
+            elif marker.startswith(fence):
+                fence = None
+            continue
+        if fence is None:
+            found.update(int(n) for n in _MENTION_RE.findall(_INLINE_CODE_RE.sub("", line)))
+    return found

@@ -27,7 +27,7 @@ from pydantic import ValidationError as PydanticValidationError
 from ohmypm import __version__
 from ohmypm.core.dates import parse_when
 from ohmypm.core.errors import OhmypmError, ValidationError
-from ohmypm.core.schemas import BUILTIN_ENTRY_TYPES, EntryCreate, EntryUpdate, SummaryUpdate
+from ohmypm.core.schemas import BUILTIN_ENTRY_TYPES, EntryCreate, EntryUpdate, LinkIn, SummaryUpdate
 from ohmypm.core.service import MemoryService
 from ohmypm.core.summaries import render_summary_markdown
 
@@ -40,6 +40,9 @@ lasting value (milestones, non-trivial issues, decisions, durable knowledge,
 artifact usage) via pm_add_entry; never store secrets. Extend an existing record
 with pm_update_entry (append_content) instead of adding a near-duplicate, and
 resolve or obsolete open issues (also stale ones) that your work settles.
+Tag records by subsystem/device/version (reuse the tags listed in the context)
+and link them: `links` with kind fixes (resolves the issue), supersedes (marks
+the old record obsolete) or relates; "#N" in a body links automatically.
 Update the summary with pm_update_summary when the project state changed meaningfully.
 Write readable Markdown in the user's language. For longer, multi-topic records,
 use headings and focused bullet points; separate paragraphs with blank lines and
@@ -56,6 +59,18 @@ WorkspaceArg = Annotated[
     Field(description="Absolute path of the agent's workspace (any directory inside the project)."),
 ]
 EntryRefArg = Annotated[str, Field(description="Entry sequence number ('12' or '#12') or entry id.")]
+TagsArg = Annotated[
+    list[str] | None,
+    Field(description="Tags such as 'lvgl' or 'device:a0ac1' (lowercase, no spaces); reuse existing tags."),
+]
+LinksArg = Annotated[
+    list[LinkIn] | None,
+    Field(
+        description='Links to other records of the project, e.g. [{"target": "#12", "kind": "fixes"}]. '
+        "Kinds: relates; fixes (marks the issue resolved); supersedes (marks the target obsolete)."
+    ),
+]
+TagFilterArg = Annotated[list[str] | None, Field(description="Only records with all of these tags.")]
 EntryType = Annotated[
     str,
     Field(description="Entry type: " + ", ".join(f"{k} ({v})" for k, v in BUILTIN_ENTRY_TYPES.items())),
@@ -170,6 +185,9 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
             Literal["markdown", "json"],
             Field(description="markdown: compact text; json: structured sections plus markdown."),
         ] = "markdown",
+        tag: Annotated[
+            str | None, Field(description="Only records with this tag (the summary is kept).")
+        ] = None,
     ) -> dict[str, Any]:
         """Deterministic project context: summary, open issues, recent important records, next steps."""
         result = service.context(
@@ -177,6 +195,7 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
             max_tokens=max_tokens,
             page=page,
             page_size=page_size,
+            tag=tag,
             **_scope(project, workspace_path),
         )
         if output == "json":
@@ -257,6 +276,8 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
             dict[str, Any] | None,
             Field(description='Optional extra fields, e.g. {"confidence": "hypothesis", "files": [...]}.'),
         ] = None,
+        tags: TagsArg = None,
+        links: LinksArg = None,
     ) -> dict[str, Any]:
         """Append a development record (milestone, issue, decision, knowledge, artifact or note)."""
         entry = service.add_entry(
@@ -268,6 +289,8 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
                 author=author,
                 source="mcp",
                 metadata=metadata or {},
+                tags=tags or [],
+                links=links or [],
             ),
             **_scope(project, workspace_path),
         )
@@ -285,6 +308,7 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
         query: Annotated[str | None, Field(description="Substring filter on title and body.")] = None,
         since: Annotated[str | None, Field(description="ISO date/time or relative (7d, 12h).")] = None,
         until: Annotated[str | None, Field(description="ISO date/time (inclusive).")] = None,
+        tags: TagFilterArg = None,
         order: Annotated[Literal["asc", "desc"], Field(description="Timeline order.")] = "desc",
         limit: Annotated[int, Field(ge=1, le=200)] = 20,
         offset: Annotated[int, Field(ge=0)] = 0,
@@ -297,6 +321,7 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
             query=query,
             since=parse_when(since),
             until=parse_when(until, end_of_day=True),
+            tags=tags,
             order=order,
             limit=limit,
             offset=offset,
@@ -339,6 +364,13 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
             dict[str, Any] | None, Field(description="Metadata keys to set (merged).")
         ] = None,
         author: Annotated[str | None, Field(description="Who makes the change.")] = None,
+        add_tags: TagsArg = None,
+        remove_tags: Annotated[list[str] | None, Field(description="Tags to remove.")] = None,
+        add_links: LinksArg = None,
+        remove_links: Annotated[
+            list[str] | None,
+            Field(description="Targets ('#12') whose explicit links from this record are removed."),
+        ] = None,
     ) -> dict[str, Any]:
         """Edit a record (e.g. resolve an issue). The previous version is kept as a revision."""
         if content is not None and append_content is not None:
@@ -351,7 +383,17 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
         meta = {**current.metadata, **metadata} if metadata else None
         updated, changed = service.update_entry(
             current.id,
-            EntryUpdate(title=title, type=type, content=body, status=status, metadata=meta),
+            EntryUpdate(
+                title=title,
+                type=type,
+                content=body,
+                status=status,
+                metadata=meta,
+                add_tags=add_tags or [],
+                remove_tags=remove_tags or [],
+                add_links=add_links or [],
+                remove_links=remove_links or [],
+            ),
             changed_by=author,
         )
         return {"changed": changed, "entry": updated.model_dump(mode="json")}
@@ -366,6 +408,7 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
         workspace_path: WorkspaceArg = None,
         all_projects: Annotated[bool, Field(description="Search every project instead of one.")] = False,
         types: Annotated[list[str] | None, Field(description="Entry type filter.")] = None,
+        tags: TagFilterArg = None,
         kinds: Annotated[
             list[Literal["entry", "summary", "project"]] | None, Field(description="What to search.")
         ] = None,
@@ -375,7 +418,14 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
         """Full-text search over records, summaries and projects."""
         scope = {} if all_projects else _scope(project, workspace_path)
         page = service.search(
-            query, all_projects=all_projects, types=types, kinds=kinds, limit=limit, offset=offset, **scope
+            query,
+            all_projects=all_projects,
+            types=types,
+            tags=tags,
+            kinds=kinds,
+            limit=limit,
+            offset=offset,
+            **scope,
         )
         return page.model_dump(mode="json")
 

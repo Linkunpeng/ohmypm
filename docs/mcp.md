@@ -60,17 +60,17 @@ args = ["mcp"]
 | `pm_get_status` | 工作区是否属于已注册项目（先调用） | `workspace_path`（必填） |
 | `pm_list_projects` | 列出项目 | `include_archived` |
 | `pm_get_project` | 项目详情 | `project` / `workspace_path` |
-| `pm_get_context` | 确定性的项目上下文 | `mode`=brief/standard/full、`max_tokens`（默认取项目设置）、`page`、`page_size`、`output`=markdown/json |
+| `pm_get_context` | 确定性的项目上下文 | `mode`=brief/standard/full、`max_tokens`（默认取项目设置）、`page`、`page_size`、`output`=markdown/json、`tag` |
 | `pm_get_summary` | 摘要（各小节 + 等价 Markdown） | |
 | `pm_update_summary` | 更新摘要（只改提供的小节；`replace` 清空其他） | `markdown` 或 `overview`…`next_steps`、`author` |
-| `pm_add_entry` | 新增记录 | `title`（必填）、`type`、`content`、`status`、`author`、`metadata` |
-| `pm_list_entries` | 列出记录（默认最新在前，带摘录） | `types`、`statuses`、`query`、`since`、`until`、`order`、`limit`、`offset`、`include_content` |
+| `pm_add_entry` | 新增记录 | `title`（必填）、`type`、`content`、`status`、`author`、`metadata`、`tags`、`links`（`[{"target": "#12", "kind": "fixes"}]`，kind 为 relates/fixes/supersedes） |
+| `pm_list_entries` | 列出记录（默认最新在前，带摘录） | `types`、`statuses`、`query`、`since`、`until`、`tags`、`order`、`limit`、`offset`、`include_content` |
 | `pm_get_entry` | 单条记录全文 | `entry`（序号或 id） |
-| `pm_update_entry` | 编辑记录（保留修订） | `title`、`type`、`content` 或 `append_content`、`status`、`metadata`（合并） |
-| `pm_search` | 全文检索 | `query`、`all_projects`、`types`、`kinds`、`limit` |
+| `pm_update_entry` | 编辑记录（保留修订） | `title`、`type`、`content` 或 `append_content`、`status`、`metadata`（合并）、`add_tags`、`remove_tags`、`add_links`、`remove_links` |
+| `pm_search` | 全文检索 | `query`、`all_projects`、`types`、`tags`、`kinds`、`limit` |
 | `pm_register_asset` | 保存图片/文本附件，返回 Markdown 引用 | `file_path`（绝对路径）或 `content_base64` + `filename`、`entry` |
 
-MCP 写入的记录 `source` 为 `mcp`。删除记录、取消注册等破坏性操作不通过 MCP 提供，请使用 CLI 或 Web。
+MCP 写入的记录 `source` 为 `mcp`。`pm_get_entry` 以及新增、编辑返回的记录带有 `links`（指向其他记录）和 `backlinks`（被其他记录指向）；列表结果中这两项为 `null`。标签、关联和作者名规则见 [cli.md](cli.md#标签与关联)。删除记录、取消注册等破坏性操作不通过 MCP 提供，请使用 CLI 或 Web。
 
 ## 错误格式
 

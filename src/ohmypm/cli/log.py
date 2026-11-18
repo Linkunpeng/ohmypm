@@ -22,8 +22,9 @@ from ohmypm.cli.common import (
     read_text_input,
     workspace,
 )
+from ohmypm.core.context import INCOMING_LABELS, OUTGOING_LABELS
 from ohmypm.core.errors import ValidationError
-from ohmypm.core.schemas import BUILTIN_ENTRY_TYPES, EntryCreate, EntryOut, EntryUpdate
+from ohmypm.core.schemas import BUILTIN_ENTRY_TYPES, EntryCreate, EntryOut, EntryUpdate, LinkIn
 
 log_app = typer.Typer(
     help="Development records (entries): add, list, show, edit, delete.", no_args_is_help=True
@@ -44,6 +45,30 @@ MetaOpt = Annotated[
     typer.Option("--meta", "-m", help="Metadata key=value (JSON values allowed). Repeatable."),
 ]
 
+TagOpt = Annotated[
+    list[str] | None,
+    typer.Option("--tag", "-g", help="Tag, e.g. lvgl or device:a0ac1 (lowercase, no spaces). Repeatable."),
+]
+RelatesOpt = Annotated[
+    list[str] | None, typer.Option("--relates", help="Link to a related entry (#N). Repeatable.")
+]
+FixesOpt = Annotated[
+    list[str] | None,
+    typer.Option("--fixes", help="This entry fixes issue #N (marks it resolved). Repeatable."),
+]
+SupersedesOpt = Annotated[
+    list[str] | None,
+    typer.Option("--supersedes", help="This entry replaces #N (marks it obsolete). Repeatable."),
+]
+
+
+def _links(relates: list[str] | None, fixes: list[str] | None, supersedes: list[str] | None) -> list[LinkIn]:
+    return [
+        LinkIn(target=target, kind=kind)  # type: ignore[arg-type]
+        for kind, targets in (("relates", relates), ("fixes", fixes), ("supersedes", supersedes))
+        for target in targets or []
+    ]
+
 
 def _scope(project: str | None, cwd: Path | None) -> dict:
     return {"project": project, "path": None if project else workspace(cwd)}
@@ -52,8 +77,13 @@ def _scope(project: str | None, cwd: Path | None) -> dict:
 def entry_line(e: EntryOut, *, project_name: str | None = None) -> str:
     tag = e.type + (f"/{e.status}" if e.status else "")
     who = f"  ({e.author})" if e.author else ""
+    tags = f"  {{{', '.join(e.tags)}}}" if e.tags else ""
     prefix = f"{project_name}  " if project_name else ""
-    return f"{prefix}#{e.sequence:<4} {local_time(e.created_at)}  [{tag}]  {e.title}{who}"
+    return f"{prefix}#{e.sequence:<4} {local_time(e.created_at)}  [{tag}]  {e.title}{tags}{who}"
+
+
+def _status_note(kind: str) -> str:
+    return {"fixes": "  (marked resolved)", "supersedes": "  (marked obsolete)"}.get(kind, "")
 
 
 def print_entry(e: EntryOut) -> None:
@@ -68,6 +98,12 @@ def print_entry(e: EntryOut) -> None:
         meta.append(f"via {e.source}")
     out("  ".join(meta))
     out(f"id: {e.id}")
+    if e.tags:
+        out("tags: " + ", ".join(e.tags))
+    for links, labels in ((e.links or [], OUTGOING_LABELS), (e.backlinks or [], INCOMING_LABELS)):
+        for link in links:
+            status = f" · {link.status}" if link.status else ""
+            out(f"{labels[link.kind]}: #{link.sequence} [{link.type}{status}] {link.title}")
     if e.metadata:
         out("metadata: " + ", ".join(f"{k}={v}" for k, v in e.metadata.items()))
     out("")
@@ -84,17 +120,25 @@ def log_add(
     status: StatusOpt = None,
     author: AuthorOpt = None,
     meta: MetaOpt = None,
+    tag: TagOpt = None,
+    relates: RelatesOpt = None,
+    fixes: FixesOpt = None,
+    supersedes: SupersedesOpt = None,
     project: ProjectOpt = None,
     cwd: CwdOpt = None,
     json_: JsonOpt = False,
 ) -> None:
     """Add an entry to the current project.
 
+    "#N" in the body links to entry N automatically.
+
     Examples:
 
       ohmypm log add --type milestone --title "Camera driver done" --content "V4L2 capture works."
 
-      cat issue.md | ohmypm log add --type issue --title "OpenCV link error" --stdin
+      cat issue.md | ohmypm log add --type issue --title "OpenCV link error" --tag opencv --stdin
+
+      ohmypm log add -T milestone -t "Fix OpenCV linking" --fixes 12 -c "Link TIFF explicitly."
     """
     body = read_text_input(content, file, stdin) or ""
     data = EntryCreate(
@@ -105,12 +149,16 @@ def log_add(
         author=author,
         source="cli",
         metadata=parse_meta(meta),
+        tags=tag or [],
+        links=_links(relates, fixes, supersedes),
     )
     entry = get_service().add_entry(data, **_scope(project, cwd))
     if json_:
         emit_json(entry)
         return
     out(f"Added #{entry.sequence} [{entry.type}] {entry.title}  (id {entry.id})")
+    for link in entry.links or []:
+        out(f"  {OUTGOING_LABELS[link.kind]} #{link.sequence} {link.title}" + _status_note(link.kind))
 
 
 @log_app.command("list")
@@ -127,6 +175,9 @@ def log_list(
     since: Annotated[str | None, typer.Option("--since", help="e.g. 2026-11-01, today, 7d, 12h.")] = None,
     until: Annotated[str | None, typer.Option("--until", help="e.g. 2026-11-04 (inclusive).")] = None,
     author: Annotated[str | None, typer.Option("--by", help="Only entries by this author.")] = None,
+    tag: Annotated[
+        list[str] | None, typer.Option("--tag", "-g", help="Only entries with this tag. Repeatable (all).")
+    ] = None,
     limit: Annotated[int, typer.Option("--limit", "-n", help="Maximum number of entries.")] = 30,
     offset: Annotated[int, typer.Option("--offset", help="Skip this many entries.")] = 0,
     reverse: Annotated[bool, typer.Option("--reverse", "-r", help="Newest first.")] = False,
@@ -150,6 +201,7 @@ def log_list(
         since=parse_when(since),
         until=parse_when(until, end_of_day=True),
         author=author,
+        tags=tag,
         include_content=full,
         all_projects=all_projects,
         **({} if all_projects else _scope(project, cwd)),
@@ -208,13 +260,25 @@ def log_edit(
     status: StatusOpt = None,
     clear_status: Annotated[bool, typer.Option("--clear-status", help="Remove the status.")] = False,
     meta: MetaOpt = None,
+    tag: Annotated[list[str] | None, typer.Option("--tag", "-g", help="Add a tag. Repeatable.")] = None,
+    untag: Annotated[list[str] | None, typer.Option("--untag", help="Remove a tag. Repeatable.")] = None,
+    relates: RelatesOpt = None,
+    fixes: FixesOpt = None,
+    supersedes: SupersedesOpt = None,
+    unlink: Annotated[
+        list[str] | None,
+        typer.Option("--unlink", help="Remove the explicit links to #N (statuses stay). Repeatable."),
+    ] = None,
     editor: Annotated[bool, typer.Option("--editor", "-e", help="Edit the body in $EDITOR.")] = False,
     author: AuthorOpt = None,
     project: ProjectOpt = None,
     cwd: CwdOpt = None,
     json_: JsonOpt = False,
 ) -> None:
-    """Edit an entry. The previous version is kept (see `ohmypm log history`)."""
+    """Edit an entry. The previous version is kept (see `ohmypm log history`).
+
+    Links (--relates/--fixes/--supersedes/--unlink) are not revisioned.
+    """
     service = get_service()
     scope = _scope(project, cwd)
     body = read_text_input(content, file, stdin)
@@ -230,7 +294,16 @@ def log_edit(
     if meta:
         metadata = {**current.metadata, **parse_meta(meta)}
     changes = EntryUpdate(
-        title=title, type=type_, content=body, status=status, clear_status=clear_status, metadata=metadata
+        title=title,
+        type=type_,
+        content=body,
+        status=status,
+        clear_status=clear_status,
+        metadata=metadata,
+        add_tags=tag or [],
+        remove_tags=untag or [],
+        add_links=_links(relates, fixes, supersedes),
+        remove_links=unlink or [],
     )
     entry, changed = service.update_entry(current.id, changes, changed_by=author)
     if json_:
@@ -310,3 +383,38 @@ def log_deleted(project: ProjectOpt = None, cwd: CwdOpt = None, json_: JsonOpt =
         out(
             f"#{r.sequence:<4} deleted {local_time(r.created_at)}  [{r.type}] {r.title}  (entry id {r.entry_id})"
         )
+
+
+@log_app.command("authors")
+def log_authors(
+    apply: Annotated[
+        bool, typer.Option("--apply", help="Rewrite author names to their normalised form.")
+    ] = False,
+    all_projects: Annotated[bool, typer.Option("--all-projects", help="All projects.")] = False,
+    project: ProjectOpt = None,
+    cwd: CwdOpt = None,
+    json_: JsonOpt = False,
+) -> None:
+    """Show author names and how they normalise (lowercase, [ohmypm] author_aliases).
+
+    New records are normalised automatically. --apply rewrites existing
+    records in place: no revision is created and update times are kept.
+    """
+    rows = get_service().authors(
+        apply=apply, all_projects=all_projects, **({} if all_projects else _scope(project, cwd))
+    )
+    if json_:
+        emit_json({"applied": apply, "authors": rows})
+        return
+    if not rows:
+        out("No authors.")
+        return
+    width = max(len(r["author"]) for r in rows)
+    pending = 0
+    for r in rows:
+        change = r["normalized"] != r["author"]
+        pending += change
+        arrow = f"  → {r['normalized']}" + ("" if apply else "  (pending)") if change else ""
+        out(f"{r['author']:<{width}}  {r['count']:>5}{arrow}")
+    if pending and not apply:
+        out("Run with --apply to rewrite these names.")

@@ -1,6 +1,6 @@
 """Default global agent instructions (installed to ~/.config/ohmypm/agent-instructions.md)."""
 
-TEMPLATE_VERSION = 3
+TEMPLATE_VERSION = 4
 
 DEFAULT_INSTRUCTIONS = """\
 # ohmypm — project memory
@@ -23,7 +23,8 @@ id explicitly). If `ohmypm` is missing or fails, continue your work without it.
 ## While working: record only what has lasting value
 
 ```bash
-ohmypm log add --type <type> --title "<specific title>" --author <client-name> --stdin <<'EOF'
+ohmypm log add --type <type> --title "<specific title>" --author <client-name> \\
+  --tag <area> --stdin <<'EOF'
 ## Result
 
 - <what was completed or confirmed>
@@ -55,9 +56,14 @@ EOF
 - Update instead of duplicating: if a record already covers the topic (check the
   context index or `ohmypm search`), add to it with
   `ohmypm log edit <number> --append --content "..."` rather than adding a near-copy.
-- Close issues your work settles, including stale ones you verified:
-  `ohmypm log edit <number> --status resolved --append --content "Fix: ..."`, or
-  `--status obsolete` with the reason when it no longer applies.
+- Tag records by subsystem, device or version (`--tag lvgl`, `--tag device:<id>`;
+  lowercase, no spaces). Reuse the tags listed in the context header.
+- Link records: `--fixes <N>` marks issue N resolved, `--supersedes <N>` marks an
+  outdated record obsolete, `--relates <N>` for related work; writing `#N` in the
+  body also links. On existing records use `ohmypm log edit <number> --fixes ...`.
+- Close issues your work settles, including stale ones you verified: add the
+  result with `--fixes <N>`, or `ohmypm log edit <N> --status resolved --append
+  --content "Fix: ..."`; use `--status obsolete` with the reason when it no longer applies.
 - Put reusable lessons (pitfalls, conventions, environment facts) into their own
   `knowledge` record instead of burying them in a milestone; choices with
   alternatives go into a `decision`.

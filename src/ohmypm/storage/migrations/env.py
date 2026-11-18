@@ -36,7 +36,9 @@ def run_migrations_online() -> None:
         return
 
     engine = create_engine(config.get_main_option("sqlalchemy.url"))
-    with engine.connect() as conn:
+    # begin(): the PRAGMA autobegins a transaction, which Alembic then leaves
+    # to the caller; it must be committed here or the upgrade is lost.
+    with engine.begin() as conn:
         conn.exec_driver_sql("PRAGMA foreign_keys = ON")
         context.configure(connection=conn, target_metadata=target_metadata, render_as_batch=True)
         with context.begin_transaction():

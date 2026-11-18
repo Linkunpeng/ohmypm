@@ -15,10 +15,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ohmypm.config import Settings, load_settings
+from ohmypm.config import Settings, load_settings, normalize_author
 from ohmypm.core import assets as assets_core
 from ohmypm.core import context as context_core
 from ohmypm.core import entries as entries_core
+from ohmypm.core import links as links_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import search as search_core
 from ohmypm.core import summaries as summaries_core
@@ -38,7 +39,7 @@ from ohmypm.core.schemas import (
 )
 from ohmypm.core.text import excerpt
 from ohmypm.storage.database import Database
-from ohmypm.storage.models import Project, SummaryRevision
+from ohmypm.storage.models import Entry, Project, SummaryRevision
 
 
 class MemoryService:
@@ -47,6 +48,19 @@ class MemoryService:
         self.db = db or Database(self.settings)
 
     # ------------------------------------------------------------ helpers
+    def _author(self, name: str | None) -> str | None:
+        return normalize_author(name, self.settings.author_aliases)
+
+    @staticmethod
+    def _detail(session: Session, entry: Entry) -> EntryOut:
+        """``EntryOut`` with outgoing links and backlinks."""
+        session.flush()
+        outgoing, incoming = links_core.links_for(session, [entry.id])
+        out = entries_core.to_out(entry)
+        out.links = outgoing.get(entry.id, [])
+        out.backlinks = incoming.get(entry.id, [])
+        return out
+
     def _project(self, session: Session, project: str | None, path: str | os.PathLike[str] | None) -> Project:
         if project:
             return projects_core.get_project(session, project)
@@ -155,12 +169,15 @@ class MemoryService:
     def add_entry(
         self, data: EntryCreate, *, project: str | None = None, path: str | os.PathLike[str] | None = None
     ) -> EntryOut:
-        if data.author is None and self.settings.default_author:
-            data = data.model_copy(update={"author": self.settings.default_author})
+        author = self._author(data.author) or self.settings.default_author
+        data = data.model_copy(update={"author": author})
         with self.db.write() as s:
             target = self._project(s, project, path)
             entry = entries_core.add_entry(s, target, data, allowed_types=self.settings.entry_types)
-            return entries_core.to_out(entry)
+            links_core.sync_mentions(s, entry)
+            for link in data.links:
+                links_core.add_link(s, entry, link.target, link.kind, changed_by=author)
+            return self._detail(s, entry)
 
     def list_entries(
         self,
@@ -174,6 +191,7 @@ class MemoryService:
         until: datetime | None = None,
         query: str | None = None,
         author: str | None = None,
+        tags: list[str] | None = None,
         order: str = "asc",
         sort: str = "sequence",
         limit: int = 50,
@@ -190,7 +208,8 @@ class MemoryService:
                 since=since,
                 until=until,
                 query=query,
-                author=author,
+                author=self._author(author),
+                tags=tags,
                 order=order,
                 sort=sort,
                 limit=limit,
@@ -208,7 +227,7 @@ class MemoryService:
     ) -> EntryOut:
         with self.db.read() as s:
             target = self._project(s, project, path) if (project or path is not None) else None
-            return entries_core.to_out(entries_core.get_entry(s, ref, project=target))
+            return self._detail(s, entries_core.get_entry(s, ref, project=target))
 
     def update_entry(
         self,
@@ -223,6 +242,7 @@ class MemoryService:
         with self.db.write() as s:
             target = self._project(s, project, path) if (project or path is not None) else None
             entry = entries_core.get_entry(s, ref, project=target)
+            changed_by = self._author(changed_by)
             entry, changed = entries_core.update_entry(
                 s,
                 entry,
@@ -231,7 +251,13 @@ class MemoryService:
                 allowed_types=self.settings.entry_types,
                 expected_revision=expected_revision,
             )
-            return entries_core.to_out(entry), changed
+            if changes.content is not None:
+                links_core.sync_mentions(s, entry)
+            for ref_ in changes.remove_links:
+                changed |= links_core.remove_links(s, entry, ref_) > 0
+            for link in changes.add_links:
+                changed |= links_core.add_link(s, entry, link.target, link.kind, changed_by=changed_by)
+            return self._detail(s, entry), changed
 
     def delete_entry(
         self,
@@ -245,7 +271,7 @@ class MemoryService:
             target = self._project(s, project, path) if (project or path is not None) else None
             entry = entries_core.get_entry(s, ref, project=target)
             out = entries_core.to_out(entry)
-            entries_core.delete_entry(s, entry, changed_by=changed_by)
+            entries_core.delete_entry(s, entry, changed_by=self._author(changed_by))
             return out
 
     def entry_history(
@@ -268,9 +294,9 @@ class MemoryService:
         with self.db.write() as s:
             target = self._project(s, project, path) if (project or path is not None) else None
             entry = entries_core.get_entry(s, ref, project=target)
-            return entries_core.to_out(
-                entries_core.restore_revision(s, entry, revision, changed_by=changed_by)
-            )
+            entry = entries_core.restore_revision(s, entry, revision, changed_by=self._author(changed_by))
+            links_core.sync_mentions(s, entry)
+            return self._detail(s, entry)
 
     def deleted_entries(
         self, *, project: str | None = None, path: str | os.PathLike[str] | None = None
@@ -278,6 +304,41 @@ class MemoryService:
         with self.db.read() as s:
             target = self._project(s, project, path)
             return [entries_core.revision_to_out(r) for r in entries_core.list_deleted(s, target)]
+
+    def tags(
+        self,
+        *,
+        project: str | None = None,
+        path: str | os.PathLike[str] | None = None,
+        all_projects: bool = False,
+    ) -> list[dict[str, Any]]:
+        with self.db.read() as s:
+            project_ids = None if all_projects else [self._project(s, project, path).id]
+            return [{"tag": tag, "count": n} for tag, n in entries_core.tag_counts(s, project_ids)]
+
+    def authors(
+        self,
+        *,
+        project: str | None = None,
+        path: str | os.PathLike[str] | None = None,
+        all_projects: bool = False,
+        apply: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Author names with counts and their normalised form; ``apply`` rewrites them.
+
+        Only the ``author`` field changes: no revision is created and
+        ``updated_at`` is kept, so record ages stay meaningful.
+        """
+        with self.db.write() if apply else self.db.read() as s:
+            project_ids = None if all_projects else [self._project(s, project, path).id]
+            rows = entries_core.author_counts(s, project_ids)
+            result = []
+            for author, count in rows:
+                normalized = self._author(author)
+                if apply and normalized != author:
+                    entries_core.rename_author(s, author, normalized, project_ids)
+                result.append({"author": author, "count": count, "normalized": normalized})
+            return result
 
     # ------------------------------------------------------------ summary
     def get_summary(
@@ -299,7 +360,12 @@ class MemoryService:
         with self.db.write() as s:
             target = self._project(s, project, path)
             return summaries_core.set_summary(
-                s, target, update, replace=replace, changed_by=changed_by, expected_revision=expected_revision
+                s,
+                target,
+                update,
+                replace=replace,
+                changed_by=self._author(changed_by),
+                expected_revision=expected_revision,
             )
 
     def set_summary_markdown(
@@ -354,6 +420,7 @@ class MemoryService:
         max_tokens: int | None = None,
         page: int = 1,
         page_size: int = 20,
+        tag: str | None = None,
     ) -> ContextResult:
         with self.db.read() as s:
             target = self._project(s, project, path)
@@ -365,6 +432,7 @@ class MemoryService:
                 page=page,
                 page_size=page_size,
                 options=context_core.resolve_options(self.settings, target),
+                tag=tag,
             )
 
     def context_settings(
@@ -409,6 +477,7 @@ class MemoryService:
         all_projects: bool = False,
         kinds: list[str] | None = None,
         types: list[str] | None = None,
+        tags: list[str] | None = None,
         since: datetime | None = None,
         until: datetime | None = None,
         include_archived: bool = False,
@@ -423,6 +492,7 @@ class MemoryService:
                 project_ids=project_ids,
                 kinds=kinds,
                 entry_types=types,
+                tags=tags,
                 since=since,
                 until=until,
                 include_archived=include_archived or not all_projects,

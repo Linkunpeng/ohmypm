@@ -23,6 +23,7 @@ from sqlalchemy import select
 from ohmypm import __version__
 from ohmypm.config import Settings, ensure_private_dir
 from ohmypm.core import assets as assets_core
+from ohmypm.core import links as links_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import summaries as summaries_core
 from ohmypm.core.errors import ValidationError
@@ -119,6 +120,7 @@ def _export_project(session, settings: Settings, project: Project, root: Path) -
     entries = session.scalars(
         select(Entry).where(Entry.project_id == project.id).order_by(Entry.sequence)
     ).all()
+    outgoing, _ = links_core.project_links(session, project.id)
     timeline = []
     for entry in entries:
         filename = f"{entry.sequence:04d}-{slugify(entry.title)}.md"
@@ -134,6 +136,11 @@ def _export_project(session, settings: Settings, project: Project, root: Path) -
                 "created_at": entry.created_at.isoformat(),
                 "updated_at": entry.updated_at.isoformat(),
                 "revision": entry.revision,
+                "tags": entry.tags or None,
+                "links": [
+                    {"kind": link.kind, "sequence": link.sequence} for link in outgoing.get(entry.id, [])
+                ]
+                or None,
                 "metadata": entry.meta or None,
             }
         )

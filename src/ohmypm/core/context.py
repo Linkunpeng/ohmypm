@@ -33,10 +33,11 @@ from sqlalchemy.orm import Session
 
 from ohmypm.config import CONTEXT_TOKEN_KEYS, DEFAULT_STALE_ISSUE_DAYS, Settings
 from ohmypm.core import entries as entries_core
+from ohmypm.core import links as links_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import summaries as summaries_core
 from ohmypm.core.errors import ValidationError
-from ohmypm.core.schemas import ProjectOut, SummaryOut
+from ohmypm.core.schemas import LinkOut, ProjectOut, SummaryOut, clean_tag
 from ohmypm.core.text import demote_headings, estimate_tokens, truncate_markdown
 from ohmypm.storage.models import Entry, Project
 
@@ -46,6 +47,7 @@ DEFAULT_MAX_TOKENS = {"brief": 3000, "standard": 8000, "full": 20000}
 MIN_MAX_TOKENS = 200
 MAX_MAX_TOKENS = 200_000
 MAX_STALE_ISSUE_DAYS = 3650
+MAX_HEADER_TAGS = 15
 IMPORTANT_TYPES = ("milestone", "decision", "issue", "artifact", "knowledge")
 PROJECT_SETTINGS_KEY = "context"
 SETTING_KEYS: tuple[str, ...] = (*CONTEXT_TOKEN_KEYS, "stale_issue_days")
@@ -70,6 +72,9 @@ class ContextEntry(BaseModel):
     content: str | None
     content_truncated: bool = False
     unverified: bool = False
+    tags: list[str] = []
+    # Rendered link groups, e.g. "fixes #9" or "mentioned in #45, #50".
+    links: list[str] = []
 
 
 class ContextSection(BaseModel):
@@ -171,14 +176,47 @@ def is_stale_issue(entry: Entry, days: int, now: datetime) -> bool:
     return days > 0 and now - _as_utc(entry.updated_at) >= timedelta(days=days)
 
 
-def open_issues(session: Session, project: Project, limit: int = 1000) -> list[Entry]:
+def open_issues(session: Session, project: Project, limit: int = 1000, tag: str | None = None) -> list[Entry]:
     stmt = (
         select(Entry)
         .where(Entry.project_id == project.id, Entry.type == "issue", Entry.status == "open")
         .order_by(Entry.sequence.desc())
         .limit(limit)
     )
+    if tag:
+        stmt = stmt.where(entries_core.has_tag(tag))
     return list(session.scalars(stmt).all())
+
+
+OUTGOING_LABELS = {
+    "relates": "related to",
+    "fixes": "fixes",
+    "supersedes": "supersedes",
+    "mentions": "mentions",
+}
+INCOMING_LABELS = {
+    "relates": "related to",
+    "fixes": "fixed by",
+    "supersedes": "superseded by",
+    "mentions": "mentioned in",
+}
+MAX_LINKS_PER_GROUP = 6
+
+
+def link_groups(outgoing: list[LinkOut], incoming: list[LinkOut]) -> list[str]:
+    """``["fixes #9", "mentioned in #45, #50"]``: explicit kinds first, then mentions."""
+    groups: dict[str, list[str]] = {}
+    for links, labels in ((outgoing, OUTGOING_LABELS), (incoming, INCOMING_LABELS)):
+        for link in sorted(links, key=lambda link: link.kind == "mentions"):
+            refs = groups.setdefault(labels[link.kind], [])
+            if f"#{link.sequence}" not in refs:
+                refs.append(f"#{link.sequence}")
+    out = []
+    for label, refs in groups.items():
+        shown = ", ".join(refs[:MAX_LINKS_PER_GROUP])
+        more = len(refs) - MAX_LINKS_PER_GROUP
+        out.append(f"{label} {shown}" + (f" (+{more})" if more > 0 else ""))
+    return out
 
 
 def _is_unverified(entry: Entry) -> bool:
@@ -190,7 +228,9 @@ def _is_unverified(entry: Entry) -> bool:
     }
 
 
-def _context_entry(entry: Entry, content: str | None, cut: bool) -> ContextEntry:
+def _context_entry(
+    entry: Entry, content: str | None, cut: bool, links: list[str] | None = None
+) -> ContextEntry:
     return ContextEntry(
         id=entry.id,
         sequence=entry.sequence,
@@ -204,6 +244,8 @@ def _context_entry(entry: Entry, content: str | None, cut: bool) -> ContextEntry
         content=content,
         content_truncated=cut,
         unverified=_is_unverified(entry),
+        tags=list(entry.tags or []),
+        links=links or [],
     )
 
 
@@ -224,11 +266,15 @@ def _entry_meta_line(entry: ContextEntry) -> str:
         parts.append(f"via {entry.source}")
     if entry.updated_at and (entry.updated_at - entry.created_at).total_seconds() > 60:
         parts.append(f"edited {entry.updated_at.strftime('%Y-%m-%d')}")
+    if entry.tags:
+        parts.append("tags: " + ", ".join(entry.tags))
     return "_" + " · ".join(parts) + "_"
 
 
 def _render_entry(entry: ContextEntry) -> str:
     lines = [_entry_heading(entry), _entry_meta_line(entry)]
+    if entry.links:
+        lines.append("_Links: " + " · ".join(entry.links) + "_")
     if entry.content:
         lines.append("")
         lines.append(entry.content)
@@ -282,6 +328,7 @@ class ContextBuilder:
         page: int = 1,
         page_size: int = 20,
         options: ContextOptions | None = None,
+        tag: str | None = None,
     ) -> None:
         if mode not in MODES:
             raise ValidationError(f"Unknown context mode '{mode}'", details={"allowed": list(MODES)})
@@ -302,6 +349,17 @@ class ContextBuilder:
         self._entry_count = projects_core.entry_count(session, project)
         self._now = datetime.now(UTC)
         self._open_issues: list[Entry] | None = None
+        # Records (not the summary) can be narrowed to one tag.
+        self.tag = clean_tag(tag) if tag else None
+        self._record_count = self._entry_count
+        if self.tag:
+            _, self._record_count = entries_core.list_entries(
+                session, project_ids=[project.id], tags=[self.tag], limit=1
+            )
+        self._outgoing, self._incoming = links_core.project_links(session, project.id)
+
+    def _links(self, entry: Entry) -> list[str]:
+        return link_groups(self._outgoing.get(entry.id, []), self._incoming.get(entry.id, []))
 
     # ------------------------------------------------------------- queries
     def _query(
@@ -320,12 +378,14 @@ class ContextBuilder:
             stmt = stmt.where(Entry.status.in_(statuses))
         if exclude_obsolete:
             stmt = stmt.where((Entry.status.is_(None)) | (Entry.status != "obsolete"))
+        if self.tag:
+            stmt = stmt.where(entries_core.has_tag(self.tag))
         stmt = stmt.order_by(Entry.sequence.desc()).limit(limit).offset(offset)
         return list(self.session.scalars(stmt).all())
 
     def _all_open_issues(self) -> list[Entry]:
         if self._open_issues is None:
-            self._open_issues = open_issues(self.session, self.project)
+            self._open_issues = open_issues(self.session, self.project, tag=self.tag)
         return self._open_issues
 
     def _is_stale(self, entry: Entry) -> bool:
@@ -389,7 +449,7 @@ class ContextBuilder:
                     )
                     content = content or None
                     cut = cut or (content is None)
-                item = _context_entry(entry, content, cut)
+                item = _context_entry(entry, content, cut, self._links(entry))
                 rendered = _render_entry(item)
                 cost = estimate_tokens(rendered) + 2
                 spent += cost
@@ -589,11 +649,11 @@ class ContextBuilder:
         if self.mode == "full":
             records = next(s for s in sections if s.key == "records")
             shown_until = (self.page - 1) * self.page_size + len(records.entries)
-            has_more = shown_until < self._entry_count
+            has_more = shown_until < self._record_count
             pagination = ContextPagination(
                 page=self.page,
                 page_size=self.page_size,
-                total_entries=self._entry_count,
+                total_entries=self._record_count,
                 has_more=has_more,
                 next_page=self.page + 1 if has_more else None,
             )
@@ -659,6 +719,19 @@ class ContextBuilder:
             lines.append(f"- Description: {p.description.strip()}")
         last = p.last_activity_at.strftime("%Y-%m-%d %H:%M UTC") if p.last_activity_at else "never"
         lines.append(f"- Records: {self._entry_count} · last activity: {last} · mode: {self.mode}")
+        if self.tag:
+            lines.append(
+                f"- Filtered by tag `{self.tag}`: {self._record_count} record(s); the summary is not filtered"
+            )
+        tags = entries_core.tag_counts(self.session, [p.id])
+        if tags:
+            shown = ", ".join(f"`{t}` ({n})" for t, n in tags[:MAX_HEADER_TAGS])
+            more = (
+                f", … {len(tags) - MAX_HEADER_TAGS} more (`ohmypm tags`)"
+                if len(tags) > MAX_HEADER_TAGS
+                else ""
+            )
+            lines.append(f"- Tags in use: {shown}{more}")
         if self.summary.updated_at:
             lines.append(
                 f"- Summary revision {self.summary.revision}, updated "
@@ -692,6 +765,8 @@ class ContextBuilder:
             out.append("\n".join(body))
         if self._entry_count == 0:
             out.append("## Records\n\n_No records yet. Add one with `ohmypm log add`._")
+        elif self._record_count == 0:
+            out.append(f"## Records\n\n_No records tagged `{self.tag}`._")
         if pagination and pagination.has_more:
             out.append(
                 f"_More records available: request page {pagination.next_page} "
@@ -709,7 +784,15 @@ def build_context(
     page: int = 1,
     page_size: int = 20,
     options: ContextOptions | None = None,
+    tag: str | None = None,
 ) -> ContextResult:
     return ContextBuilder(
-        session, project, mode=mode, max_tokens=max_tokens, page=page, page_size=page_size, options=options
+        session,
+        project,
+        mode=mode,
+        max_tokens=max_tokens,
+        page=page,
+        page_size=page_size,
+        options=options,
+        tag=tag,
     ).build()

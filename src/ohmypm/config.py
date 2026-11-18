@@ -23,6 +23,26 @@ DEFAULT_WEB_PORT = 8737
 DEFAULT_MAX_UPLOAD_MB = 20
 DEFAULT_STALE_ISSUE_DAYS = 7
 CONTEXT_TOKEN_KEYS = ("brief_tokens", "standard_tokens", "full_tokens")
+# Author names are stored lowercase; these spellings map to the client names
+# used in the agent instructions. Extend with [ohmypm] author_aliases.
+BUILTIN_AUTHOR_ALIASES = {
+    "claude": "claude-code",
+    "claude code": "claude-code",
+    "claudecode": "claude-code",
+    "antigravity": "agy",
+}
+
+
+def normalize_author(name: str | None, aliases: dict[str, str] | None = None) -> str | None:
+    """Trim, collapse whitespace and lowercase ``name``, then apply aliases."""
+    if name is None:
+        return None
+    key = " ".join(name.split()).lower()
+    if not key:
+        return None
+    return (aliases if aliases is not None else BUILTIN_AUTHOR_ALIASES).get(key, key)
+
+
 _TYPE_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
@@ -59,6 +79,7 @@ class Settings:
     web_port: int = DEFAULT_WEB_PORT
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_MB * 1024 * 1024
     default_author: str | None = None
+    author_aliases: dict[str, str] = field(default_factory=lambda: dict(BUILTIN_AUTHOR_ALIASES))
     extra_entry_types: tuple[str, ...] = ()
     # Context defaults from ``[context]``; project settings override them.
     context_tokens: dict[str, int] = field(default_factory=dict)
@@ -127,6 +148,12 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
     port = web.get("port", DEFAULT_WEB_PORT)
     max_mb = assets.get("max_upload_mb", DEFAULT_MAX_UPLOAD_MB)
     author = general.get("author")
+    aliases = dict(BUILTIN_AUTHOR_ALIASES)
+    raw_aliases = general.get("author_aliases")
+    if isinstance(raw_aliases, dict):
+        for key, value in raw_aliases.items():
+            if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
+                aliases[" ".join(key.split()).lower()] = " ".join(value.split()).lower()
     stale_days = context.get("stale_issue_days", DEFAULT_STALE_ISSUE_DAYS)
 
     return Settings(
@@ -137,7 +164,8 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
         max_upload_bytes=int(max_mb * 1024 * 1024)
         if isinstance(max_mb, (int, float)) and max_mb > 0
         else DEFAULT_MAX_UPLOAD_MB * 1024 * 1024,
-        default_author=author if isinstance(author, str) and author else None,
+        default_author=normalize_author(author, aliases) if isinstance(author, str) else None,
+        author_aliases=aliases,
         extra_entry_types=tuple(
             t.strip().lower() for t in extra_types if isinstance(t, str) and _TYPE_RE.match(t.strip().lower())
         ),

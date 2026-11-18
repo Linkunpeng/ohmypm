@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from ohmypm.core.entries import like_escape
 from ohmypm.core.errors import ValidationError
-from ohmypm.core.schemas import SearchHit
+from ohmypm.core.schemas import SearchHit, clean_tag
 
 KINDS = ("entry", "summary", "project")
 MAX_LIMIT = 200
@@ -69,6 +69,7 @@ def search(
     project_ids: Sequence[str] | None = None,
     kinds: Sequence[str] | None = None,
     entry_types: Sequence[str] | None = None,
+    tags: Sequence[str] | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
     include_archived: bool = False,
@@ -115,6 +116,10 @@ def search(
         where.append(in_clause(f"{s}.project_id", "pid", project_ids))
     if entry_types:
         where.append(f"({s}.kind != 'entry' OR {in_clause(f'{s}.entry_type', 'et', entry_types)})")
+    for i, tag in enumerate(tags or ()):
+        # Tags only exist on entries; every given tag must be present.
+        params[f"tag{i}"] = clean_tag(tag)
+        where.append(f"{s}.kind = 'entry' AND EXISTS (SELECT 1 FROM json_each(e.tags) WHERE value = :tag{i})")
     if since is not None:
         params["since"] = _db_time(since)
         where.append(f"{s}.created_at >= :since")

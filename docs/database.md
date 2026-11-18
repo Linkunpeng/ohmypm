@@ -17,8 +17,9 @@
 | 表 | 说明 |
 |---|---|
 | `projects` | `id`(UUID)、`name`、`root_path`（realpath）、`description`、`archived_at`（取消注册时间）、`created_at`、`updated_at`、`last_activity_at`、`next_sequence`、`metadata`(JSON) |
-| `entries` | `id`、`project_id`→projects（CASCADE）、`sequence`（项目内唯一、递增、不复用）、`type`、`title`、`content`(Markdown)、`status`(open/resolved/obsolete/NULL)、`author`、`source`(cli/mcp/web)、`revision`、`created_at`、`updated_at`、`metadata`(JSON) |
-| `entry_revisions` | 每次编辑/删除前的快照（`reason`=edit/delete、`changed_by`）。不对 entries 设外键，因此删除的记录可以恢复；随项目一起删除 |
+| `entries` | `id`、`project_id`→projects（CASCADE）、`sequence`（项目内唯一、递增、不复用）、`type`、`title`、`content`(Markdown)、`status`(open/resolved/obsolete/NULL)、`author`（小写规范化）、`source`(cli/mcp/web)、`revision`、`created_at`、`updated_at`、`metadata`(JSON)、`tags`（JSON 数组，规范化并排序；用 `json_each` 过滤） |
+| `entry_revisions` | 每次编辑/删除前的快照（含 `tags`，`reason`=edit/delete、`changed_by`）。不对 entries 设外键，因此删除的记录可以恢复；随项目一起删除 |
+| `entry_links` | 记录之间的有向关联：`project_id`（CASCADE）、`source_id` / `target_id`→entries（CASCADE）、`kind`（relates/fixes/supersedes，以及根据正文 `#N` 生成的 mentions）、`created_at`；`(source_id, target_id, kind)` 唯一。不产生修订 |
 | `project_summaries` | 每个项目一行：`overview`、`architecture`、`current_state`、`important_decisions`、`known_issues`、`next_steps`、`revision`、`updated_by` |
 | `summary_revisions` | 摘要被覆盖前的快照（JSON） |
 | `assets` | `id`、`project_id`（CASCADE）、`entry_id`（SET NULL）、`filename`、`mime_type`、`size`、`sha256`、`storage_path`（相对路径）、`created_at` |
@@ -31,6 +32,7 @@
 - `projects.last_activity_at`
 - `entries (project_id, sequence)` 唯一；`(project_id, created_at)`、`(project_id, type)`、`(project_id, status)`、`created_at`
 - `assets.project_id`、`assets.entry_id`、`entry_revisions.project_id`
+- `entry_links.project_id`、`entry_links.target_id`（反向关联）
 
 ## 删除语义
 

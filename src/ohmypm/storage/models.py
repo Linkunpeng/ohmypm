@@ -109,8 +109,28 @@ class Entry(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     meta: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    # Normalised, sorted tags (see ohmypm.core.schemas.clean_tags).
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     project: Mapped[Project] = relationship(back_populates="entries")
+
+
+class EntryLink(Base):
+    """Directed link between two entries of the same project.
+
+    ``kind`` is ``relates``, ``fixes``, ``supersedes`` (set explicitly) or
+    ``mentions`` (derived from ``#N`` references in the source's body).
+    """
+
+    __tablename__ = "entry_links"
+    __table_args__ = (UniqueConstraint("source_id", "target_id", "kind", name="uq_entry_links_source_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
+    source_id: Mapped[str] = mapped_column(ForeignKey("entries.id", ondelete="CASCADE"))
+    target_id: Mapped[str] = mapped_column(ForeignKey("entries.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
 class EntryRevision(Base):
@@ -131,6 +151,7 @@ class EntryRevision(Base):
     content: Mapped[str] = mapped_column(Text)
     status: Mapped[str | None] = mapped_column(String(32), default=None)
     meta: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     reason: Mapped[str] = mapped_column(String(16), default="edit")  # edit | delete
     changed_by: Mapped[str | None] = mapped_column(String(200), default=None)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

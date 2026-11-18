@@ -157,6 +157,9 @@ def context(
     ] = None,
     page: Annotated[int, typer.Option("--page", help="Page of records (full mode).")] = 1,
     page_size: Annotated[int, typer.Option("--page-size", help="Records per page (full mode).")] = 20,
+    tag: Annotated[
+        str | None, typer.Option("--tag", "-g", help="Only records with this tag (the summary is kept).")
+    ] = None,
     project: ProjectOpt = None,
     cwd: CwdOpt = None,
     json_: JsonOpt = False,
@@ -166,7 +169,7 @@ def context(
     Deterministic (no AI); respects a token budget and marks truncated text.
     """
     result = get_service().context(
-        mode=mode, max_tokens=max_tokens, page=page, page_size=page_size, **_scope(project, cwd)
+        mode=mode, max_tokens=max_tokens, page=page, page_size=page_size, tag=tag, **_scope(project, cwd)
     )
     if json_:
         emit_json(result)
@@ -182,6 +185,9 @@ def search(
     ] = None,
     type_: Annotated[
         list[str] | None, typer.Option("--type", "-T", help="Entry type filter. Repeatable.")
+    ] = None,
+    tag: Annotated[
+        list[str] | None, typer.Option("--tag", "-g", help="Only entries with this tag. Repeatable (all).")
     ] = None,
     since: Annotated[str | None, typer.Option("--since", help="e.g. 2026-11-01, 7d.")] = None,
     until: Annotated[str | None, typer.Option("--until", help="e.g. 2026-11-04.")] = None,
@@ -212,6 +218,7 @@ def search(
         all_projects=all_projects,
         kinds=kind,
         types=type_,
+        tags=tag,
         since=parse_when(since),
         until=parse_when(until, end_of_day=True),
         limit=limit,
@@ -239,3 +246,22 @@ def search(
             out(f"    {hit.snippet}")
     if page.total > len(page.items) + offset:
         out(f"({len(page.items)} of {page.total} shown; use --limit/--offset)")
+
+
+def tags(
+    all_projects: Annotated[bool, typer.Option("--all", "-a", help="Tags of every project.")] = False,
+    project: ProjectOpt = None,
+    cwd: CwdOpt = None,
+    json_: JsonOpt = False,
+) -> None:
+    """List the tags in use with their record counts (most used first)."""
+    rows = get_service().tags(all_projects=all_projects, **({} if all_projects else _scope(project, cwd)))
+    if json_:
+        emit_json(rows)
+        return
+    if not rows:
+        out("No tags yet. Add some with `ohmypm log add/edit --tag <tag>`.")
+        return
+    width = max(len(r["tag"]) for r in rows)
+    for r in rows:
+        out(f"{r['tag']:<{width}}  {r['count']:>5}")

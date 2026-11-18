@@ -6,8 +6,9 @@ import re
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import Select, func, or_, select, update
+from sqlalchemy import Select, bindparam, func, or_, select, text, update
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import TextClause
 
 from ohmypm.core.errors import AmbiguousReferenceError, ConflictError, NotFoundError, ValidationError
 from ohmypm.core.projects import touch
@@ -17,6 +18,8 @@ from ohmypm.core.schemas import (
     EntryOut,
     EntryRevisionOut,
     EntryUpdate,
+    clean_tag,
+    clean_tags,
 )
 from ohmypm.core.text import asset_refs, excerpt
 from ohmypm.storage.models import Asset, Entry, EntryRevision, Project, utcnow
@@ -48,6 +51,7 @@ def to_out(entry: Entry, *, include_content: bool = True, excerpt_chars: int = 2
         updated_at=entry.updated_at,
         metadata=dict(entry.meta or {}),
         asset_ids=sorted(asset_refs(entry.content)),
+        tags=list(entry.tags or []),
     )
 
 
@@ -115,6 +119,7 @@ def add_entry(
         created_at=now,
         updated_at=now,
         meta=dict(data.metadata),
+        tags=list(data.tags),
     )
     session.add(entry)
     touch(project)
@@ -166,6 +171,7 @@ def _snapshot(session: Session, entry: Entry, reason: str, changed_by: str | Non
             content=entry.content,
             status=entry.status,
             meta=dict(entry.meta or {}),
+            tags=list(entry.tags or []),
             reason=reason,
             changed_by=changed_by,
             created_at=utcnow(),
@@ -207,6 +213,11 @@ def update_entry(
         new_values["status"] = changes.status
     if changes.metadata is not None and changes.metadata != (entry.meta or {}):
         new_values["meta"] = dict(changes.metadata)
+    current_tags = list(entry.tags or [])
+    tags = set(changes.tags if changes.tags is not None else current_tags)
+    tags = (tags | set(changes.add_tags)) - set(changes.remove_tags)
+    if sorted(tags) != current_tags:
+        new_values["tags"] = clean_tags(list(tags))
     if not new_values:
         return entry, False
 
@@ -247,6 +258,7 @@ def restore_revision(
             status=rev.status,  # type: ignore[arg-type]
             clear_status=rev.status is None,
             metadata=dict(rev.meta or {}),
+            tags=list(rev.tags or []),
         ),
         changed_by=changed_by,
         allowed_types=None if rev.type in BUILTIN_ENTRY_TYPES else [rev.type],
@@ -272,6 +284,13 @@ def list_deleted(session: Session, project: Project) -> list[EntryRevision]:
     )
 
 
+def has_tag(tag: str, key: str = "tag") -> TextClause:
+    """SQL condition: the ``entries`` row carries ``tag`` (bound as ``:key``)."""
+    return text(f"EXISTS (SELECT 1 FROM json_each(entries.tags) WHERE value = :{key})").bindparams(
+        bindparam(key, clean_tag(tag))
+    )
+
+
 def _filtered(
     stmt: Select,
     *,
@@ -282,6 +301,7 @@ def _filtered(
     until: datetime | None,
     query: str | None,
     author: str | None,
+    tags: Sequence[str] | None = None,
 ) -> Select:
     if project_ids is not None:
         stmt = stmt.where(Entry.project_id.in_(project_ids))
@@ -298,6 +318,9 @@ def _filtered(
         stmt = stmt.where(Entry.created_at <= until)
     if author:
         stmt = stmt.where(Entry.author == author)
+    for i, tag in enumerate(tags or ()):
+        # Every given tag must be present.
+        stmt = stmt.where(has_tag(tag, f"tag{i}"))
     if query:
         for term in query.split():
             like = f"%{like_escape(term)}%"
@@ -315,6 +338,7 @@ def list_entries(
     until: datetime | None = None,
     query: str | None = None,
     author: str | None = None,
+    tags: Sequence[str] | None = None,
     order: str = "asc",
     sort: str = "sequence",
     limit: int = 50,
@@ -338,6 +362,7 @@ def list_entries(
         until=until,
         query=query,
         author=author,
+        tags=tags,
     )
     total = session.scalar(_filtered(select(func.count(Entry.id)), **filters)) or 0
     column = columns[sort]
@@ -354,3 +379,41 @@ def type_counts(session: Session, project_id: str | None = None) -> dict[str, in
     if project_id:
         stmt = stmt.where(Entry.project_id == project_id)
     return {t: int(n) for t, n in session.execute(stmt).all()}
+
+
+def tag_counts(session: Session, project_ids: Sequence[str] | None = None) -> list[tuple[str, int]]:
+    """Tags in use with their entry counts, most used first."""
+    where = ""
+    params: dict[str, str] = {}
+    if project_ids is not None:
+        if not project_ids:
+            return []
+        keys = [f":p{i}" for i in range(len(project_ids))]
+        params = {f"p{i}": pid for i, pid in enumerate(project_ids)}
+        where = f"WHERE entries.project_id IN ({', '.join(keys)})"
+    rows = session.execute(
+        text(
+            "SELECT tag.value, count(*) AS n FROM entries, json_each(entries.tags) AS tag "
+            f"{where} GROUP BY tag.value ORDER BY n DESC, tag.value"
+        ),
+        params,
+    ).all()
+    return [(str(tag), int(n)) for tag, n in rows]
+
+
+def author_counts(session: Session, project_ids: Sequence[str] | None = None) -> list[tuple[str, int]]:
+    stmt = select(Entry.author, func.count(Entry.id)).where(Entry.author.is_not(None)).group_by(Entry.author)
+    if project_ids is not None:
+        stmt = stmt.where(Entry.project_id.in_(project_ids))
+    return sorted(((str(a), int(n)) for a, n in session.execute(stmt).all()), key=lambda r: (-r[1], r[0]))
+
+
+def rename_author(
+    session: Session, old: str, new: str | None, project_ids: Sequence[str] | None = None
+) -> int:
+    """Rename an author in place (no revision, ``updated_at`` unchanged)."""
+    stmt = update(Entry).where(Entry.author == old).values(author=new)
+    if project_ids is not None:
+        stmt = stmt.where(Entry.project_id.in_(project_ids))
+    result = session.execute(stmt.execution_options(synchronize_session=False))
+    return int(result.rowcount or 0)  # type: ignore[attr-defined]
