@@ -12,6 +12,7 @@ export const queryKeys = {
   entry: (id: string) => ["entry", id] as const,
   summary: (projectId: string) => ["summary", projectId] as const,
   assets: (projectId: string) => ["assets", projectId] as const,
+  tags: (projectId: string) => ["tags", projectId] as const,
 };
 
 export function useMeta() {
@@ -30,6 +31,14 @@ export function useAssets(projectId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.assets(projectId ?? ""),
     queryFn: () => api.assets(projectId!),
+    enabled: !!projectId,
+  });
+}
+
+export function useTags(projectId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.tags(projectId ?? ""),
+    queryFn: () => api.tags(projectId!),
     enabled: !!projectId,
   });
 }

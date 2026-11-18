@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TypeDistribution } from "@/components/TypeDistribution";
 import { api, ApiError } from "@/lib/api";
+import { parseTags } from "@/lib/entryTypes";
 import { assetUrl, formatBytes, safeUrl, timeAgo } from "@/lib/format";
 import { highlight } from "@/pages/SearchPage";
 
@@ -33,6 +34,13 @@ describe("format helpers", () => {
     expect(timeAgo("2026-11-04T11:59:50Z", now)).toBe("just now");
     expect(timeAgo("2026-11-04T10:00:00Z", now)).toMatch(/2 hours ago/);
     expect(timeAgo(null)).toBe("never");
+  });
+});
+
+describe("parseTags", () => {
+  it("splits on spaces and commas, lowercases, dedupes and sorts", () => {
+    expect(parseTags(" LVGL, device:A0AC1  相册，lvgl\nv3.6.0 ")).toEqual(["device:a0ac1", "lvgl", "v3.6.0", "相册"]);
+    expect(parseTags("  ")).toEqual([]);
   });
 });
 

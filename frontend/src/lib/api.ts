@@ -11,6 +11,7 @@ import type {
   SearchHit,
   Summary,
   SummarySection,
+  TagCount,
 } from "./types";
 
 /** Error returned by the ohmypm API: `{"error": {"code", "message", "details"}}`. */
@@ -72,6 +73,7 @@ export interface EntryFilters {
   type?: string[];
   status?: string[];
   q?: string;
+  tag?: string[];
   since?: string;
   until?: string;
   order?: "asc" | "desc";
@@ -88,6 +90,7 @@ export interface EntryInput {
   status?: EntryStatus | null;
   author?: string | null;
   metadata?: Record<string, unknown>;
+  tags?: string[];
 }
 
 export const api = {
@@ -124,6 +127,7 @@ export const api = {
     request<{ changed: boolean; summary: Summary }>("PUT", `/api/projects/${projectId}/summary`, {
       body: { ...sections, expected_revision: expectedRevision, author: author ?? undefined },
     }),
+  tags: (projectId: string) => request<TagCount[]>("GET", `/api/projects/${projectId}/tags`),
   context: (projectId: string, mode: string) =>
     request<ContextResult>("GET", `/api/projects/${projectId}/context`, { query: { mode } }),
 

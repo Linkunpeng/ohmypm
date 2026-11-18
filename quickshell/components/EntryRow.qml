@@ -21,11 +21,35 @@ Item {
     readonly property string body: full?.content ?? record.content ?? record.excerpt ?? record.snippet ?? ""
     readonly property string excerpt: Style.plain(record.excerpt ?? record.snippet ?? record.content ?? "")
     readonly property bool hypothesis: (record.metadata?.confidence ?? "") === "hypothesis" || record.unverified === true
+    readonly property var tags: record.tags ?? full?.tags ?? []
+    readonly property string relations: describeLinks(full?.links ?? [], full?.backlinks ?? [])
     readonly property var status: ({
             open: { text: "未解决", color: Style.urgent },
             resolved: { text: "已解决", color: Style.teal },
             obsolete: { text: "已过时", color: Style.inactive }
         })[record.status] ?? null
+
+    // "修复 #9 · 被 #45、#50 提到": how this record relates to others (from `log show`).
+    function describeLinks(links: var, backlinks: var): string {
+        const outgoing = { fixes: "修复 %", supersedes: "取代 %", relates: "相关 %", mentions: "提到 %" };
+        const incoming = { fixes: "被 % 修复", supersedes: "被 % 取代", relates: "相关 %", mentions: "被 % 提到" };
+        const groups = [];
+        const refs = {};
+        const add = (list, labels) => {
+            for (const link of list) {
+                const label = labels[link.kind] ?? link.kind + " %";
+                if (refs[label] === undefined) {
+                    refs[label] = [];
+                    groups.push(label);
+                }
+                if (refs[label].indexOf("#" + link.sequence) < 0)
+                    refs[label].push("#" + link.sequence);
+            }
+        };
+        add(links, outgoing);
+        add(backlinks, incoming);
+        return groups.map(label => label.replace("%", refs[label].join("、"))).join(" · ");
+    }
 
     width: parent?.width ?? 0
     implicitHeight: column.implicitHeight + 22
@@ -94,6 +118,27 @@ Item {
                 font.bold: false
                 font.pixelSize: Style.px(12)
             }
+            BarText {
+                visible: root.tags.length > 0
+                width: Math.min(implicitWidth, parent.width)
+                text: Style.glyphs.tag + " " + root.tags.join("  ")
+                color: Style.inactive
+                font.bold: false
+                font.pixelSize: Style.px(12)
+                elide: Text.ElideRight
+            }
+        }
+
+        BarText {
+            x: Style.px(20) + 10
+            width: parent.width - x
+            visible: root.expanded && root.relations !== ""
+            text: Style.glyphs.link + " " + root.relations
+            color: Style.accent
+            font.bold: false
+            font.pixelSize: Style.px(12)
+            wrapMode: Text.Wrap
+            elide: Text.ElideNone
         }
 
         BarText {

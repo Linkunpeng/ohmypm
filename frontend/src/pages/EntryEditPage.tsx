@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
-import { TYPE_ORDER, typeStyle } from "@/lib/entryTypes";
-import { queryKeys, useAuthor, useDocumentTitle, useMeta, useProject } from "@/lib/hooks";
+import { parseTags, TYPE_ORDER, typeStyle } from "@/lib/entryTypes";
+import { queryKeys, useAuthor, useDocumentTitle, useMeta, useProject, useTags } from "@/lib/hooks";
 import type { Entry, EntryStatus } from "@/lib/types";
 
 const TEMPLATES: Record<string, string> = {
@@ -26,18 +26,25 @@ function EntryForm({ projectId, entry }: { projectId: string; entry?: Entry }) {
   const client = useQueryClient();
   const [author] = useAuthor();
   const { data: meta } = useMeta();
+  const { data: knownTags } = useTags(projectId);
   const [title, setTitle] = useState(entry?.title ?? "");
   const [type, setType] = useState(entry?.type ?? "note");
   const [status, setStatus] = useState<EntryStatus | "">(entry?.status ?? "");
   const [content, setContent] = useState(entry?.content ?? "");
+  const [tagText, setTagText] = useState((entry?.tags ?? []).join(" "));
   const [mode, setMode] = useState<EditorMode>("rich");
   const [notice, setNotice] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const saved = useRef(false);
-  const [original] = useState({ title, type, status, content });
+  const [original] = useState({ title, type, status, content, tags: parseTags(tagText).join(" ") });
+  const tags = parseTags(tagText);
 
   const dirty =
-    title !== original.title || type !== original.type || status !== original.status || content !== original.content;
+    title !== original.title ||
+    type !== original.type ||
+    status !== original.status ||
+    content !== original.content ||
+    tags.join(" ") !== original.tags;
   const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && !saved.current && currentLocation.pathname !== nextLocation.pathname);
 
   useEffect(() => {
@@ -64,13 +71,14 @@ function EntryForm({ projectId, entry }: { projectId: string; entry?: Entry }) {
         if (title !== entry.title) changes.title = title;
         if (type !== entry.type) changes.type = type;
         if (content !== (entry.content ?? "")) changes.content = content;
+        if (tags.join(" ") !== entry.tags.join(" ")) changes.tags = tags;
         if (status !== (entry.status ?? "")) {
           if (status) changes.status = status;
           else changes.clear_status = true;
         }
         return (await api.updateEntry(entry.id, changes)).entry;
       }
-      return api.createEntry(projectId, { type, title, content, status: status || null, author });
+      return api.createEntry(projectId, { type, title, content, status: status || null, author, tags });
     },
     onSuccess: (result) => {
       saved.current = true;
@@ -79,6 +87,7 @@ function EntryForm({ projectId, entry }: { projectId: string; entry?: Entry }) {
       void client.invalidateQueries({ queryKey: queryKeys.dashboard });
       void client.invalidateQueries({ queryKey: queryKeys.projects });
       void client.invalidateQueries({ queryKey: queryKeys.assets(projectId) });
+      void client.invalidateQueries({ queryKey: queryKeys.tags(projectId) });
       toast.success(entry ? "Record saved" : `Record #${result.sequence} added`);
       navigate(`/projects/${projectId}/entries/${result.id}`);
     },
@@ -160,6 +169,28 @@ function EntryForm({ projectId, entry }: { projectId: string; entry?: Entry }) {
             <option value="obsolete">Obsolete</option>
           </select>
         </div>
+      </div>
+
+      <div className="max-w-xl space-y-1.5">
+        <Label htmlFor="entry-tags">Tags</Label>
+        <Input
+          id="entry-tags"
+          value={tagText}
+          onChange={(e) => setTagText(e.target.value)}
+          placeholder="e.g. lvgl device:a0ac1 v3.6.0"
+          list="known-tags"
+          className="h-8 font-mono text-sm"
+          aria-describedby="entry-tags-hint"
+        />
+        <datalist id="known-tags">
+          {(knownTags ?? []).map(({ tag }) => (
+            <option key={tag} value={tag} />
+          ))}
+        </datalist>
+        <p id="entry-tags-hint" className="text-xs text-muted-foreground">
+          Separated by spaces or commas; stored in lowercase. Write <code className="font-mono">#12</code> in the text
+          to link record 12.
+        </p>
       </div>
 
       <div className="space-y-1.5">

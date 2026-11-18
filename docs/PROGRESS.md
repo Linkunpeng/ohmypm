@@ -31,7 +31,7 @@
 - 前端主包约 1.2 MB（gzip 约 360 KB），编辑器与 Mermaid 已按需加载。
 - 搜索结果的排序只对 ≥3 字符的词使用 bm25；纯短词查询按时间排序。
 - 尚未实现：多设备同步（按设计不做）、附件以外的二进制格式（PDF 等）。
-- Web UI 与 Quickshell 面板尚未展示标签和关联（CLI / MCP / context 已支持）。
+- Web UI 可以编辑标签，但显式关联（fixes / supersedes / relates）只能通过 CLI / MCP 建立；Web 正文中的 `#N` 会自动关联。
 
 ## 交接提示
 

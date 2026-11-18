@@ -33,6 +33,26 @@ export interface Entry {
   updated_at: string;
   metadata: Record<string, unknown>;
   asset_ids: string[];
+  tags: string[];
+  /** Outgoing links and backlinks: present for single records, null in lists. */
+  links?: EntryLink[] | null;
+  backlinks?: EntryLink[] | null;
+}
+
+export type LinkKind = "relates" | "fixes" | "supersedes" | "mentions";
+
+export interface EntryLink {
+  kind: LinkKind;
+  entry_id: string;
+  sequence: number;
+  type: string;
+  title: string;
+  status: EntryStatus | null;
+}
+
+export interface TagCount {
+  tag: string;
+  count: number;
 }
 
 export interface EntryRevision {
@@ -44,6 +64,7 @@ export interface EntryRevision {
   title: string;
   content: string;
   status: string | null;
+  tags: string[];
   reason: string;
   changed_by: string | null;
   created_at: string;

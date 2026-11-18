@@ -332,3 +332,39 @@ def test_spa_fallback_without_build(
     assert web.get("/api/nope").status_code == 404
     monkeypatch.setattr(app_module, "web_dist_dir", lambda: None)
     assert TestClient(create_app(service, token=None), base_url=BASE).get("/").status_code == 503
+
+
+def test_tags_and_links(client: TestClient, project: dict) -> None:
+    pid = project["id"]
+    bug = client.post(
+        "/api/entries", json={"project_id": pid, "type": "issue", "title": "bug", "tags": ["LVGL"]}
+    ).json()
+    assert bug["tags"] == ["lvgl"] and bug["links"] == [] and bug["backlinks"] == []
+    fix = client.post(
+        "/api/entries",
+        json={
+            "project_id": pid,
+            "title": "fix",
+            "content": "see #1",
+            "links": [{"target": "#1", "kind": "fixes"}],
+        },
+    ).json()
+    assert [(link["kind"], link["sequence"]) for link in fix["links"]] == [("fixes", 1)]
+    detail = client.get(f"/api/entries/{bug['id']}").json()
+    assert detail["status"] == "resolved" and [link["sequence"] for link in detail["backlinks"]] == [2]
+    patched = client.patch(f"/api/entries/{fix['id']}", json={"tags": ["ui", "lvgl"]}).json()
+    assert patched["changed"] and patched["entry"]["tags"] == ["lvgl", "ui"]
+    listed = client.get("/api/entries", params={"project_id": pid, "tag": ["ui"]}).json()
+    assert [e["sequence"] for e in listed["items"]] == [2] and listed["items"][0]["links"] is None
+    assert client.get(f"/api/projects/{pid}/tags").json() == [
+        {"tag": "lvgl", "count": 2},
+        {"tag": "ui", "count": 1},
+    ]
+    hits = client.get("/api/search", params={"q": "fix", "project_id": pid, "tag": "ui"}).json()
+    assert [h["sequence"] for h in hits["items"]] == [2]
+    assert (
+        "Filtered by tag `ui`"
+        in client.get(f"/api/projects/{pid}/context", params={"tag": "ui"}).json()["markdown"]
+    )
+    bad = client.post("/api/entries", json={"project_id": pid, "title": "x", "tags": ["two words"]})
+    assert bad.status_code == 422

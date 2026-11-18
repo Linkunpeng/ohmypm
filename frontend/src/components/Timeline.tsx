@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { StatusTag, TypeTag } from "@/components/Badges";
+import { StatusTag, TagChip, TypeTag } from "@/components/Badges";
 import { dayKey, formatDate, formatTime } from "@/lib/format";
 import { typeStyle } from "@/lib/entryTypes";
 import type { Asset, Entry } from "@/lib/types";
@@ -87,6 +87,9 @@ function TimelineRow({ entry, projectId, assets }: { entry: Entry; projectId: st
           <StatusTag status={entry.status} />
           {entry.author && <span>{entry.author}</span>}
           {entry.revision > 1 && <span>edited</span>}
+          {entry.tags.map((tag) => (
+            <TagChip key={tag} tag={tag} projectId={projectId} />
+          ))}
         </div>
         {entry.excerpt && (
           <p className="mt-1.5 line-clamp-2 max-w-[72ch] font-serif text-[0.95rem] leading-relaxed text-foreground/75">

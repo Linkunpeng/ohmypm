@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, History, Paperclip, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { CheckCircle2, History, Link2, Paperclip, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
-import { StatusTag, TypeTag } from "@/components/Badges";
+import { StatusTag, TagChip, TypeTag } from "@/components/Badges";
 import { ErrorNotice, Loading } from "@/components/common";
 import { MarkdownView } from "@/components/markdown/MarkdownView";
 import {
@@ -20,9 +20,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
+import { LINK_LABEL } from "@/lib/entryTypes";
 import { formatBytes, formatDateTime } from "@/lib/format";
 import { queryKeys, useAssets, useAuthor, useDocumentTitle, useProject } from "@/lib/hooks";
-import type { Entry } from "@/lib/types";
+import type { Entry, EntryLink } from "@/lib/types";
 
 function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -30,6 +31,45 @@ function MetaRow({ label, children }: { label: string; children: React.ReactNode
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words">{children}</dd>
     </div>
+  );
+}
+
+/** Links grouped by how they read from this record: "Fixes", "Mentioned in", … */
+function Relations({ entry, projectId }: { entry: Entry; projectId: string }) {
+  const groups = new Map<string, EntryLink[]>();
+  const add = (links: EntryLink[] | null | undefined, direction: "outgoing" | "incoming") => {
+    for (const link of links ?? []) {
+      const label = LINK_LABEL[link.kind]?.[direction] ?? link.kind;
+      if (!groups.get(label)?.some((l) => l.entry_id === link.entry_id)) groups.set(label, [...(groups.get(label) ?? []), link]);
+    }
+  };
+  add(entry.links, "outgoing");
+  add(entry.backlinks, "incoming");
+  if (groups.size === 0) return null;
+  return (
+    <section aria-labelledby="relations">
+      <h2 id="relations" className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+        <Link2 className="size-3.5" aria-hidden /> Related records
+      </h2>
+      <div className="space-y-3">
+        {[...groups].map(([label, links]) => (
+          <div key={label}>
+            <h3 className="mb-1 text-xs text-muted-foreground">{label}</h3>
+            <ul className="space-y-1">
+              {links.map((link) => (
+                <li key={link.entry_id} className="text-sm">
+                  <Link to={`/projects/${projectId}/entries/${link.entry_id}`} className="hover:underline">
+                    <span className="tabular text-muted-foreground">{link.sequence}</span>{" "}
+                    <span className={link.status === "obsolete" ? "text-muted-foreground line-through" : ""}>{link.title}</span>
+                  </Link>{" "}
+                  <StatusTag status={link.status} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -212,6 +252,15 @@ export function EntryPage() {
             )}
             <MetaRow label="Author">{entry.author ?? <span className="text-muted-foreground">unknown</span>}</MetaRow>
             <MetaRow label="Added via">{entry.source ?? "—"}</MetaRow>
+            {entry.tags.length > 0 && (
+              <MetaRow label="Tags">
+                <span className="flex flex-wrap gap-1">
+                  {entry.tags.map((tag) => (
+                    <TagChip key={tag} tag={tag} projectId={projectId} />
+                  ))}
+                </span>
+              </MetaRow>
+            )}
             {metadata.map(([k, v]) => (
               <MetaRow key={k} label={k}>
                 <span className="font-mono text-xs">{typeof v === "string" ? v : JSON.stringify(v)}</span>
@@ -221,6 +270,8 @@ export function EntryPage() {
               <span className="font-mono text-xs text-muted-foreground">{entry.id}</span>
             </MetaRow>
           </dl>
+
+          <Relations entry={entry} projectId={projectId} />
 
           {attachments.length > 0 && (
             <section aria-labelledby="attachments">

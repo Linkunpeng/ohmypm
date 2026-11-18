@@ -110,7 +110,9 @@ Singleton {
             refresh: String.fromCodePoint(0xF0450),
             close: String.fromCodePoint(0xF0156),
             resolved: String.fromCodePoint(0xF05E0),
-            clock: String.fromCodePoint(0xF0954)
+            clock: String.fromCodePoint(0xF0954),
+            tag: String.fromCodePoint(0xF04FC),
+            link: String.fromCodePoint(0xF0339)
         })
 
     function withAlpha(c: color, a: real): color {

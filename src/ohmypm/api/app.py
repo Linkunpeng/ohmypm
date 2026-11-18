@@ -219,11 +219,16 @@ def create_app(
         max_tokens: Annotated[int | None, Query(ge=200, le=200_000)] = None,
         page: Annotated[int, Query(ge=1)] = 1,
         page_size: Annotated[int, Query(ge=1, le=200)] = 20,
+        tag: str | None = None,
     ) -> dict[str, Any]:
         result = service.context(
-            project=project_id, mode=mode, max_tokens=max_tokens, page=page, page_size=page_size
+            project=project_id, mode=mode, max_tokens=max_tokens, page=page, page_size=page_size, tag=tag
         )
         return result.model_dump(mode="json")
+
+    @app.get("/api/projects/{project_id}/tags", tags=["entries"])
+    def project_tags(project_id: str) -> list[dict[str, Any]]:
+        return service.tags(project=project_id)
 
     # ---------------------------------------------------------- entries
     @app.get("/api/entries", tags=["entries"])
@@ -235,6 +240,7 @@ def create_app(
         since: str | None = None,
         until: str | None = None,
         author: str | None = None,
+        tag: Annotated[list[str] | None, Query()] = None,
         order: Literal["asc", "desc"] = "asc",
         sort: Literal["sequence", "created_at", "updated_at"] = "sequence",
         limit: Annotated[int, Query(ge=1, le=500)] = 50,
@@ -250,6 +256,7 @@ def create_app(
             since=_when(since),
             until=_when(until, end=True),
             author=author,
+            tags=tag,
             order=order,
             sort=sort,
             limit=limit,
@@ -294,6 +301,7 @@ def create_app(
         project_id: str | None = None,
         kind: Annotated[list[str] | None, Query()] = None,
         type: Annotated[list[str] | None, Query()] = None,
+        tag: Annotated[list[str] | None, Query()] = None,
         since: str | None = None,
         until: str | None = None,
         include_archived: bool = False,
@@ -306,6 +314,7 @@ def create_app(
             all_projects=project_id is None,
             kinds=kind,
             types=type,
+            tags=tag,
             since=_when(since),
             until=_when(until, end=True),
             include_archived=include_archived,

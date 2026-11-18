@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { TYPE_ORDER, typeStyle } from "@/lib/entryTypes";
 import { timeAgo } from "@/lib/format";
-import { queryKeys, useAssets, useDocumentTitle, useMeta, useProject } from "@/lib/hooks";
+import { queryKeys, useAssets, useDocumentTitle, useMeta, useProject, useTags } from "@/lib/hooks";
 import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -78,10 +78,12 @@ export function ProjectPage() {
   const { data: project, error } = useProject(projectId);
   const { data: meta } = useMeta();
   const { data: assetList } = useAssets(projectId);
+  const { data: tagCounts } = useTags(projectId);
   const summary = useQuery({ queryKey: queryKeys.summary(projectId), queryFn: () => api.summary(projectId) });
   useDocumentTitle(project?.name);
 
   const types = params.getAll("type");
+  const tags = params.getAll("tag");
   const status = params.get("status") ?? "";
   const q = params.get("q") ?? "";
   const since = params.get("since") ?? "";
@@ -96,13 +98,14 @@ export function ProjectPage() {
   };
 
   const entries = useInfiniteQuery({
-    queryKey: [...queryKeys.entries(projectId), { types, status, q, since, until, order }],
+    queryKey: [...queryKeys.entries(projectId), { types, tags, status, q, since, until, order }],
     queryFn: ({ pageParam }) =>
       api.entries({
         project_id: projectId,
         type: types,
         status: status ? [status] : undefined,
         q: q || undefined,
+        tag: tags,
         since: since || undefined,
         until: until || undefined,
         order,
@@ -117,7 +120,12 @@ export function ProjectPage() {
   const items = entries.data?.pages.flatMap((p) => p.items) ?? [];
   const total = entries.data?.pages[0]?.total ?? 0;
   const typeOptions = [...TYPE_ORDER, ...Object.keys(meta?.entry_types ?? {}).filter((t) => !TYPE_ORDER.includes(t))];
-  const filtered = types.length > 0 || !!status || !!q || !!since || !!until;
+  const filtered = types.length > 0 || tags.length > 0 || !!status || !!q || !!since || !!until;
+  // Selected tags stay visible even when no record carries them any more.
+  const tagOptions = [
+    ...(tagCounts ?? []),
+    ...tags.filter((t) => !tagCounts?.some((c) => c.tag === t)).map((tag) => ({ tag, count: 0 })),
+  ];
 
   if (error) return <ErrorNotice error={error} what="this project" />;
   if (!project) return <Loading />;
@@ -234,6 +242,34 @@ export function ProjectPage() {
               );
             })}
           </div>
+          {tagOptions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by tag">
+              {tagOptions.map(({ tag, count }) => {
+                const active = tags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() =>
+                      update((p) => {
+                        const next = active ? tags.filter((x) => x !== tag) : [...tags, tag];
+                        p.delete("tag");
+                        next.forEach((x) => p.append("tag", x));
+                      })
+                    }
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded border px-1.5 py-px font-mono text-xs",
+                      active ? "border-primary bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {tag}
+                    <span className="tabular text-muted-foreground">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex flex-wrap items-end gap-3">
             <form
               className="min-w-48 flex-1"
@@ -301,7 +337,7 @@ export function ProjectPage() {
                 size="sm"
                 onClick={() => {
                   setDraftQuery("");
-                  update((p) => ["type", "status", "q", "since", "until"].forEach((k) => p.delete(k)));
+                  update((p) => ["type", "tag", "status", "q", "since", "until"].forEach((k) => p.delete(k)));
                 }}
               >
                 Clear filters
