@@ -24,6 +24,8 @@ from ohmypm.cli.common import (
 )
 from ohmypm.core.context import INCOMING_LABELS, OUTGOING_LABELS
 from ohmypm.core.errors import ValidationError
+from ohmypm.core.gitinfo import label as git_label
+from ohmypm.core.gitinfo import valid_stamp
 from ohmypm.core.schemas import BUILTIN_ENTRY_TYPES, EntryCreate, EntryOut, EntryUpdate, LinkIn
 
 log_app = typer.Typer(
@@ -104,8 +106,11 @@ def print_entry(e: EntryOut) -> None:
         for link in links:
             status = f" · {link.status}" if link.status else ""
             out(f"{labels[link.kind]}: #{link.sequence} [{link.type}{status}] {link.title}")
-    if e.metadata:
-        out("metadata: " + ", ".join(f"{k}={v}" for k, v in e.metadata.items()))
+    metadata = dict(e.metadata)
+    if stamp := valid_stamp(metadata.pop("git", None)):
+        out(f"git: {git_label(stamp)}")
+    if metadata:
+        out("metadata: " + ", ".join(f"{k}={v}" for k, v in metadata.items()))
     out("")
     out(e.content or "")
 

@@ -293,6 +293,8 @@ class SummaryOut(_Model):
     revision: int = 0
     updated_by: str | None = None
     updated_at: datetime | None = None
+    # {"commit", "branch"} of the project's HEAD when the summary last changed.
+    git: dict[str, Any] | None = None
     is_empty: bool = True
 
 

@@ -7,11 +7,13 @@ document whose ``## `` headings name the sections (English or Chinese).
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ohmypm.core.errors import ConflictError, NotFoundError, ValidationError
+from ohmypm.core.gitinfo import valid_stamp
 from ohmypm.core.projects import touch
 from ohmypm.core.schemas import MAX_CONTENT_CHARS, SummaryOut, SummaryUpdate
 from ohmypm.storage.models import SUMMARY_FIELDS, Project, ProjectSummary, SummaryRevision, utcnow
@@ -205,6 +207,7 @@ def to_out(project_id: str, row: ProjectSummary | None) -> SummaryOut:
         revision=row.revision,
         updated_by=row.updated_by,
         updated_at=row.updated_at,
+        git=valid_stamp(row.git),
         is_empty=not any(v.strip() for v in values.values()),
         **values,
     )
@@ -222,12 +225,14 @@ def set_summary(
     replace: bool = False,
     changed_by: str | None = None,
     expected_revision: int | None = None,
+    git: dict[str, Any] | None = None,
 ) -> tuple[SummaryOut, bool]:
     """Update summary sections. Returns ``(summary, changed)``.
 
     Only provided sections change unless ``replace`` is set, in which case
     missing sections are cleared. The previous version is kept in
-    ``summary_revisions``.
+    ``summary_revisions``. ``git`` is the project's HEAD stamp for this
+    change (``None`` when unknown); it replaces the previous stamp.
     """
     provided = update.provided()
     for key, value in provided.items():
@@ -249,7 +254,12 @@ def set_summary(
     now = utcnow()
     if row is None:
         row = ProjectSummary(
-            project_id=project.id, revision=1, created_at=now, updated_at=now, updated_by=changed_by
+            project_id=project.id,
+            revision=1,
+            created_at=now,
+            updated_at=now,
+            updated_by=changed_by,
+            git=git,
         )
         for key, value in target.items():
             setattr(row, key, value)
@@ -259,7 +269,12 @@ def set_summary(
             SummaryRevision(
                 project_id=project.id,
                 revision=row.revision,
-                data={**current, "updated_by": row.updated_by, "updated_at": row.updated_at.isoformat()},
+                data={
+                    **current,
+                    "updated_by": row.updated_by,
+                    "updated_at": row.updated_at.isoformat(),
+                    "git": row.git,
+                },
                 changed_by=changed_by,
                 created_at=now,
             )
@@ -269,6 +284,7 @@ def set_summary(
         row.revision += 1
         row.updated_at = now
         row.updated_by = changed_by
+        row.git = git
     touch(project)
     session.flush()
     return to_out(project.id, row), True
@@ -285,7 +301,12 @@ def list_summary_revisions(session: Session, project: Project) -> list[SummaryRe
 
 
 def restore_summary_revision(
-    session: Session, project: Project, revision: int, *, changed_by: str | None = None
+    session: Session,
+    project: Project,
+    revision: int,
+    *,
+    changed_by: str | None = None,
+    git: dict[str, Any] | None = None,
 ) -> SummaryOut:
     rev = session.scalars(
         select(SummaryRevision).where(
@@ -295,5 +316,7 @@ def restore_summary_revision(
     if rev is None:
         raise NotFoundError(f"Summary revision {revision} not found")
     data = {key: rev.data.get(key, "") for key in SUMMARY_FIELDS}
-    summary, _ = set_summary(session, project, SummaryUpdate(**data), replace=True, changed_by=changed_by)
+    summary, _ = set_summary(
+        session, project, SummaryUpdate(**data), replace=True, changed_by=changed_by, git=git
+    )
     return summary

@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from ohmypm.config import CONTEXT_TOKEN_KEYS, DEFAULT_STALE_ISSUE_DAYS, Settings
 from ohmypm.core import entries as entries_core
+from ohmypm.core import gitinfo
 from ohmypm.core import links as links_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import summaries as summaries_core
@@ -73,6 +74,8 @@ class ContextEntry(BaseModel):
     content_truncated: bool = False
     unverified: bool = False
     tags: list[str] = []
+    # Short commit the project was on when the record was written.
+    commit: str | None = None
     # Rendered link groups, e.g. "fixes #9" or "mentioned in #45, #50".
     links: list[str] = []
 
@@ -245,6 +248,9 @@ def _context_entry(
         content_truncated=cut,
         unverified=_is_unverified(entry),
         tags=list(entry.tags or []),
+        commit=gitinfo.short(stamp["commit"])
+        if (stamp := gitinfo.valid_stamp((entry.meta or {}).get("git")))
+        else None,
         links=links or [],
     )
 
@@ -264,6 +270,8 @@ def _entry_meta_line(entry: ContextEntry) -> str:
         parts.append(f"by {entry.author}")
     if entry.source:
         parts.append(f"via {entry.source}")
+    if entry.commit:
+        parts.append(f"at {entry.commit}")
     if entry.updated_at and (entry.updated_at - entry.created_at).total_seconds() > 60:
         parts.append(f"edited {entry.updated_at.strftime('%Y-%m-%d')}")
     if entry.tags:
@@ -329,6 +337,7 @@ class ContextBuilder:
         page_size: int = 20,
         options: ContextOptions | None = None,
         tag: str | None = None,
+        check_git: bool = True,
     ) -> None:
         if mode not in MODES:
             raise ValidationError(f"Unknown context mode '{mode}'", details={"allowed": list(MODES)})
@@ -357,6 +366,17 @@ class ContextBuilder:
                 session, project_ids=[project.id], tags=[self.tag], limit=1
             )
         self._outgoing, self._incoming = links_core.project_links(session, project.id)
+        # What happened since the summary last changed (None when unknown).
+        self._records_since_summary: int | None = None
+        self._summary_commits_behind: int | None = None
+        if self.summary.updated_at is not None:
+            self._records_since_summary = entries_core.count_created_since(
+                session, project, self.summary.updated_at
+            )
+            if check_git and self.summary.git:
+                self._summary_commits_behind = gitinfo.commits_since(
+                    project.root_path, self.summary.git["commit"]
+                )
 
     def _links(self, entry: Entry) -> list[str]:
         return link_groups(self._outgoing.get(entry.id, []), self._incoming.get(entry.id, []))
@@ -708,6 +728,8 @@ class ContextBuilder:
             "open_issues": len(open_issues),
             "stale_open_issues": sum(1 for e in open_issues if self._is_stale(e)),
             "stale_issue_days": self.options.stale_issue_days,
+            "records_since_summary": self._records_since_summary,
+            "summary_commits_behind": self._summary_commits_behind,
         }
 
     def _header(self) -> str:
@@ -733,13 +755,38 @@ class ContextBuilder:
             )
             lines.append(f"- Tags in use: {shown}{more}")
         if self.summary.updated_at:
-            lines.append(
+            line = (
                 f"- Summary revision {self.summary.revision}, updated "
                 f"{self.summary.updated_at.strftime('%Y-%m-%d %H:%M UTC')}"
-                + (f" by {self.summary.updated_by}" if self.summary.updated_by else "")
             )
+            if self.summary.updated_by:
+                line += f" by {self.summary.updated_by}"
+            if self.summary.git:
+                line += f" at `{gitinfo.short(self.summary.git['commit'])}`"
+                if self.summary.git.get("branch"):
+                    line += f" ({self.summary.git['branch']})"
+            lines.append(line)
+            drift = self._drift_line()
+            if drift:
+                lines.append(drift)
         lines += ["", GUIDANCE]
         return "\n".join(lines)
+
+    def _drift_line(self) -> str | None:
+        """``- Since the summary: …`` when commits or records were added after it changed."""
+        parts = []
+        commits = self._summary_commits_behind
+        if commits:
+            commit = gitinfo.short(self.summary.git["commit"]) if self.summary.git else ""
+            parts.append(f"{commits} commit(s) on HEAD (`git log --oneline {commit}..HEAD`)")
+        if self._records_since_summary:
+            parts.append(f"{self._records_since_summary} new record(s)")
+        if not parts:
+            return None
+        return (
+            f"- Since the summary: {' and '.join(parts)}. Parts of it may be outdated; "
+            "update it if they changed the project state."
+        )
 
     def _render(
         self, header: str, sections: list[ContextSection], pagination: ContextPagination | None
@@ -785,6 +832,7 @@ def build_context(
     page_size: int = 20,
     options: ContextOptions | None = None,
     tag: str | None = None,
+    check_git: bool = True,
 ) -> ContextResult:
     return ContextBuilder(
         session,
@@ -795,4 +843,5 @@ def build_context(
         page_size=page_size,
         options=options,
         tag=tag,
+        check_git=check_git,
     ).build()

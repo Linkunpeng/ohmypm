@@ -19,7 +19,9 @@ Page {
     BarText {
         width: parent.width
         visible: page.summary !== null && !page.summary.is_empty
-        text: "第 " + (page.summary?.revision ?? 0) + " 版，" + (page.summary?.updated_by ? page.summary.updated_by + " " : "") + "更新于 " + Style.when(page.summary?.updated_at)
+        text: "第 " + (page.summary?.revision ?? 0) + " 版，" + (page.summary?.updated_by ? page.summary.updated_by + " " : "") + "更新于 " + Style.when(page.summary?.updated_at) + (page.summary?.git ? "（提交 " + page.summary.git.commit.slice(0, 7) + "）" : "")
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
         color: Style.inactive
         font.bold: false
         font.pixelSize: Style.px(12)

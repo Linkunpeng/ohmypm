@@ -20,7 +20,7 @@
 | `entries` | `id`、`project_id`→projects（CASCADE）、`sequence`（项目内唯一、递增、不复用）、`type`、`title`、`content`(Markdown)、`status`(open/resolved/obsolete/NULL)、`author`（小写规范化）、`source`(cli/mcp/web)、`revision`、`created_at`、`updated_at`、`metadata`(JSON)、`tags`（JSON 数组，规范化并排序；用 `json_each` 过滤） |
 | `entry_revisions` | 每次编辑/删除前的快照（含 `tags`，`reason`=edit/delete、`changed_by`）。不对 entries 设外键，因此删除的记录可以恢复；随项目一起删除 |
 | `entry_links` | 记录之间的有向关联：`project_id`（CASCADE）、`source_id` / `target_id`→entries（CASCADE）、`kind`（relates/fixes/supersedes，以及根据正文 `#N` 生成的 mentions）、`created_at`；`(source_id, target_id, kind)` 唯一。不产生修订 |
-| `project_summaries` | 每个项目一行：`overview`、`architecture`、`current_state`、`important_decisions`、`known_issues`、`next_steps`、`revision`、`updated_by` |
+| `project_summaries` | 每个项目一行：`overview`、`architecture`、`current_state`、`important_decisions`、`known_issues`、`next_steps`、`revision`、`updated_by`、`git`（最近一次变更时的 HEAD：`{commit, branch}`，未知时为 NULL；0003 迁移加入） |
 | `summary_revisions` | 摘要被覆盖前的快照（JSON） |
 | `assets` | `id`、`project_id`（CASCADE）、`entry_id`（SET NULL）、`filename`、`mime_type`、`size`、`sha256`、`storage_path`（相对路径）、`created_at` |
 | `search_map` / `search_index` | 全文索引：`search_index` 是 FTS5（`tokenize='trigram'`），`search_map` 给每个文档稳定的整数 rowid；由 entries / project_summaries / projects 上的触发器维护 |

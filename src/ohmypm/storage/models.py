@@ -179,6 +179,8 @@ class ProjectSummary(Base):
     next_steps: Mapped[str] = mapped_column(Text, default="")
     revision: Mapped[int] = mapped_column(Integer, default=1)
     updated_by: Mapped[str | None] = mapped_column(String(200), default=None)
+    # {"commit", "branch"} of the project's HEAD at the last change, if known.
+    git: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 

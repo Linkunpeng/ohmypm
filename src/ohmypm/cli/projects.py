@@ -22,6 +22,7 @@ from ohmypm.cli.common import (
     workspace,
 )
 from ohmypm.core.errors import ValidationError
+from ohmypm.core.gitinfo import short as short_commit
 from ohmypm.core.schemas import ProjectOut
 
 project_app = typer.Typer(help="Inspect and manage a registered project.", no_args_is_help=True)
@@ -113,9 +114,19 @@ def status(cwd: CwdOpt = None, json_: JsonOpt = False) -> None:
         out(f"Subpath:   {info['relative_path']}")
     stale = f", {info['stale_open_issues']} stale" if info["stale_open_issues"] else ""
     out(f"Records:   {p['entry_count']}  (open issues: {info['open_issues']}{stale})")
-    out(
-        f"Summary:   {'yes, updated ' + local_time(info['summary_updated_at']) if info['summary_exists'] else 'none'}"
-    )
+    summary = "none"
+    if info["summary_exists"]:
+        summary = "yes, updated " + local_time(info["summary_updated_at"])
+        if info["summary_git"]:
+            summary += f" at {short_commit(info['summary_git']['commit'])}"
+        drift = []
+        if info["summary_commits_behind"]:
+            drift.append(f"{info['summary_commits_behind']} commit(s)")
+        if info["records_since_summary"]:
+            drift.append(f"{info['records_since_summary']} record(s)")
+        if drift:
+            summary += f"  (since then: {', '.join(drift)})"
+    out(f"Summary:   {summary}")
     out(f"Activity:  {local_time(p['last_activity_at'])}")
 
 

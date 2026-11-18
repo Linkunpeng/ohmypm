@@ -69,3 +69,21 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 }
+
+export interface GitStamp {
+  commit: string;
+  branch: string | null;
+}
+
+/** `{commit, branch}` stamp written by ohmypm, or null for anything else. */
+export function gitStamp(value: unknown): GitStamp | null {
+  if (!value || typeof value !== "object") return null;
+  const { commit, branch } = value as Record<string, unknown>;
+  if (typeof commit !== "string" || !/^[0-9a-f]{7,64}$/.test(commit)) return null;
+  return { commit, branch: typeof branch === "string" ? branch : null };
+}
+
+/** `abc1234 (main)`, or just the short commit for a detached HEAD. */
+export function gitLabel(stamp: GitStamp): string {
+  return stamp.commit.slice(0, 7) + (stamp.branch ? ` (${stamp.branch})` : "");
+}

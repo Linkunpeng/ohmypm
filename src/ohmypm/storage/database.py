@@ -25,7 +25,7 @@ from ohmypm.config import Settings, ensure_private_dir
 
 # Keep in sync with the newest file in storage/migrations/versions.
 # tests/test_migrations.py asserts that this matches Alembic's head.
-SCHEMA_HEAD = "0002_tags_links"
+SCHEMA_HEAD = "0003_summary_git"
 
 BUSY_TIMEOUT_MS = 15_000
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"

@@ -9,7 +9,7 @@ import { MarkdownEditor, type EditorMode } from "@/components/editor/MarkdownEdi
 import { MarkdownView } from "@/components/markdown/MarkdownView";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, gitLabel } from "@/lib/format";
 import { queryKeys, useAuthor, useDocumentTitle, useProject } from "@/lib/hooks";
 import { SUMMARY_SECTIONS, type Summary, type SummarySection } from "@/lib/types";
 
@@ -107,7 +107,8 @@ export function SummaryPage() {
         {summary.updated_at ? (
           <>
             Revision {summary.revision}, updated {formatDateTime(summary.updated_at)}
-            {summary.updated_by ? ` by ${summary.updated_by}` : ""}. Agents read this first.
+            {summary.updated_by ? ` by ${summary.updated_by}` : ""}
+            {summary.git ? ` at ${gitLabel(summary.git)}` : ""}. Agents read this first.
           </>
         ) : (
           "Not written yet. Agents read this first, so keep it short and current."

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TypeDistribution } from "@/components/TypeDistribution";
 import { api, ApiError } from "@/lib/api";
 import { parseTags } from "@/lib/entryTypes";
-import { assetUrl, formatBytes, safeUrl, timeAgo } from "@/lib/format";
+import { assetUrl, formatBytes, gitLabel, gitStamp, safeUrl, timeAgo } from "@/lib/format";
 import { highlight } from "@/pages/SearchPage";
 
 describe("format helpers", () => {
@@ -34,6 +34,21 @@ describe("format helpers", () => {
     expect(timeAgo("2026-11-04T11:59:50Z", now)).toBe("just now");
     expect(timeAgo("2026-11-04T10:00:00Z", now)).toMatch(/2 hours ago/);
     expect(timeAgo(null)).toBe("never");
+  });
+});
+
+describe("git stamps", () => {
+  it("accepts ohmypm stamps and labels them", () => {
+    const stamp = gitStamp({ commit: "cf637fb0123456789abcdef0123456789abcdef0", branch: "master" });
+    expect(stamp).not.toBeNull();
+    expect(gitLabel(stamp!)).toBe("cf637fb (master)");
+    expect(gitLabel({ commit: "cf637fb0123", branch: null })).toBe("cf637fb");
+  });
+
+  it("rejects other metadata values", () => {
+    expect(gitStamp("cf637fb")).toBeNull();
+    expect(gitStamp({ commit: "not a sha" })).toBeNull();
+    expect(gitStamp(null)).toBeNull();
   });
 });
 

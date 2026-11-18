@@ -19,6 +19,7 @@ from ohmypm.config import Settings, load_settings, normalize_author
 from ohmypm.core import assets as assets_core
 from ohmypm.core import context as context_core
 from ohmypm.core import entries as entries_core
+from ohmypm.core import gitinfo
 from ohmypm.core import links as links_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import search as search_core
@@ -68,6 +69,26 @@ class MemoryService:
             return projects_core.require_project_for_path(session, path)
         raise ValidationError("Specify a project (id or name) or a workspace path")
 
+    def _git_stamp(self, project: str | None, path: str | os.PathLike[str] | None) -> dict[str, Any] | None:
+        """HEAD of the project's root. Runs before the write transaction so Git never holds the lock."""
+        if not self.settings.git_stamps:
+            return None
+        with self.db.read() as s:
+            root = self._project(s, project, path).root_path
+        return gitinfo.head(root)
+
+    def _summary_drift(self, session: Session, target: Project, summary: SummaryOut) -> dict[str, Any]:
+        """How far the project moved since the summary last changed: new records and commits."""
+        if summary.updated_at is None:
+            return {"records_since_summary": None, "summary_commits_behind": None}
+        behind = None
+        if summary.git and self.settings.git_stamps:
+            behind = gitinfo.commits_since(target.root_path, summary.git["commit"])
+        return {
+            "records_since_summary": entries_core.count_created_since(session, target, summary.updated_at),
+            "summary_commits_behind": behind,
+        }
+
     # ----------------------------------------------------------- projects
     def status(self, path: str | os.PathLike[str]) -> dict[str, Any]:
         resolved = projects_core.canonical_path(path)
@@ -100,6 +121,8 @@ class MemoryService:
                 "project": projects_core.to_out(project, count).model_dump(mode="json"),
                 "summary_exists": not summary.is_empty,
                 "summary_updated_at": summary.updated_at.isoformat() if summary.updated_at else None,
+                "summary_git": summary.git,
+                **self._summary_drift(s, project, summary),
                 "open_issues": open_total,
                 "stale_open_issues": stale_total,
                 "stale_issue_days": stale_days,
@@ -170,7 +193,10 @@ class MemoryService:
         self, data: EntryCreate, *, project: str | None = None, path: str | os.PathLike[str] | None = None
     ) -> EntryOut:
         author = self._author(data.author) or self.settings.default_author
-        data = data.model_copy(update={"author": author})
+        updates: dict[str, Any] = {"author": author}
+        if "git" not in data.metadata and (stamp := self._git_stamp(project, path)):
+            updates["metadata"] = {**data.metadata, "git": stamp}
+        data = data.model_copy(update=updates)
         with self.db.write() as s:
             target = self._project(s, project, path)
             entry = entries_core.add_entry(s, target, data, allowed_types=self.settings.entry_types)
@@ -357,6 +383,7 @@ class MemoryService:
         changed_by: str | None = None,
         expected_revision: int | None = None,
     ) -> tuple[SummaryOut, bool]:
+        stamp = self._git_stamp(project, path)
         with self.db.write() as s:
             target = self._project(s, project, path)
             return summaries_core.set_summary(
@@ -366,6 +393,7 @@ class MemoryService:
                 replace=replace,
                 changed_by=self._author(changed_by),
                 expected_revision=expected_revision,
+                git=stamp,
             )
 
     def set_summary_markdown(
@@ -406,9 +434,12 @@ class MemoryService:
         path: str | os.PathLike[str] | None = None,
         changed_by: str | None = None,
     ) -> SummaryOut:
+        stamp = self._git_stamp(project, path)
         with self.db.write() as s:
             target = self._project(s, project, path)
-            return summaries_core.restore_summary_revision(s, target, revision, changed_by=changed_by)
+            return summaries_core.restore_summary_revision(
+                s, target, revision, changed_by=self._author(changed_by), git=stamp
+            )
 
     # ------------------------------------------------------------ context
     def context(
@@ -433,6 +464,7 @@ class MemoryService:
                 page_size=page_size,
                 options=context_core.resolve_options(self.settings, target),
                 tag=tag,
+                check_git=self.settings.git_stamps,
             )
 
     def context_settings(

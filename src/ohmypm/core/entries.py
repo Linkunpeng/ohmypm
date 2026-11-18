@@ -128,6 +128,18 @@ def add_entry(
     return entry
 
 
+def count_created_since(session: Session, project: Project, since: datetime) -> int:
+    """Entries of ``project`` created after ``since``."""
+    return int(
+        session.scalar(
+            select(func.count())
+            .select_from(Entry)
+            .where(Entry.project_id == project.id, Entry.created_at > since)
+        )
+        or 0
+    )
+
+
 def get_entry(session: Session, ref: str | int, *, project: Project | None = None) -> Entry:
     """Find an entry by ``#sequence`` / sequence (needs ``project``), id or id prefix."""
     text = str(ref).strip()

@@ -22,6 +22,7 @@ from ohmypm.cli.common import (
     workspace,
 )
 from ohmypm.core.errors import ProjectNotRegisteredError, ValidationError
+from ohmypm.core.gitinfo import label as git_label
 from ohmypm.core.schemas import SummaryUpdate
 from ohmypm.core.summaries import SECTION_TITLES, render_summary_markdown, section_key
 
@@ -69,6 +70,7 @@ def summary_show(
     err(
         f"(revision {summary.revision}, updated {local_time(summary.updated_at)}"
         + (f" by {summary.updated_by}" if summary.updated_by else "")
+        + (f" at {git_label(summary.git)}" if summary.git else "")
         + ")"
     )
 

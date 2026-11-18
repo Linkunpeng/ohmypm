@@ -59,6 +59,9 @@ extra_types = ["experiment"]   # 在 6 种内置类型之外追加的记录类�
 [context]
 brief_tokens = 3000            # ohmypm context 各模式的默认预算（standard_tokens / full_tokens 同理）
 stale_issue_days = 7           # open issue 超过该天数未更新时折叠为“久未更新”列表；0 关闭
+
+[git]
+stamps = true                  # 新记录和摘要写入时记录项目 HEAD 提交；false 关闭（也不再计算摘要落后的提交数）
 ```
 
 文件中不认识的键会被忽略，ohmypm 从不改写已有的配置文件。单个项目可用 `ohmypm project settings` 覆盖 `[context]` 中的值（保存在数据库中，不写入项目目录）。环境变量见 `.env.example`。

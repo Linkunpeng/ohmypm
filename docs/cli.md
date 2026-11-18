@@ -131,6 +131,17 @@ ohmypm context --max-tokens 1500 --json
 
 - 默认预算按优先级取值：`--max-tokens` → 项目设置（`ohmypm project settings`）→ `config.toml` 的 `[context]` → 内置默认（3000 / 8000 / 20000）。
 - 超过阈值（默认 7 天）未更新的 open issue 不再展开正文，而是在“Stale Open Issues”小节中逐条列出序号、标题、打开日期和距上次更新的天数，并提示 Agent 核实后关闭或追加新发现。追加内容或修改状态都会刷新更新时间。JSON 中该小节的 `entries` 不含正文，`stats` 增加 `stale_open_issues` 与 `stale_issue_days`。
+- 摘要更新后若又有新记录或新提交，头部会多一行“Since the summary: N commit(s) on HEAD … and M new record(s)”，提醒 Agent 核对并更新摘要。`stats` 中对应 `summary_commits_behind` 与 `records_since_summary`，`ohmypm status --json` 也包含这两项及 `summary_git`。
+
+## Git 提交标记
+
+项目根目录是 Git 仓库时，新记录的 `metadata.git` 和每次实际变更的摘要都会记下当时的 HEAD：`{"commit": "<完整 SHA>", "branch": "<分支名，分离 HEAD 时为 null>"}`。只执行只读的 `git rev-parse` / `symbolic-ref` / `rev-list`（3 秒超时，不加锁），失败时不记录，绝不阻塞写入。
+
+- 记录的是写入时所在的提交；Agent 往往在提交前记录，所以它表示“基于哪个提交完成的工作”，不保证包含该工作本身。
+- 调用方在 `metadata` 中自带 `git` 时不会被覆盖；编辑记录不会更新标记。
+- `log show` 显示为 `git: cf637fb (master)`，context 中每条记录的元信息行显示 `at cf637fb`。
+- 提交被 rebase 或 gc 丢弃后，落后提交数无法计算，只显示新增记录数。
+- 在 `config.toml` 中设置 `[git] stamps = false` 可整体关闭。
 
 ## 搜索
 

@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { LINK_LABEL } from "@/lib/entryTypes";
-import { formatBytes, formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime, gitLabel, gitStamp } from "@/lib/format";
 import { queryKeys, useAssets, useAuthor, useDocumentTitle, useProject } from "@/lib/hooks";
 import type { Entry, EntryLink } from "@/lib/types";
 
@@ -189,7 +189,8 @@ export function EntryPage() {
   if (error || !entry) return <ErrorNotice error={error ?? "not found"} what="this record" />;
 
   const attachments = (assets ?? []).filter((a) => entry.asset_ids.includes(a.id) || a.entry_id === entry.id);
-  const metadata = Object.entries(entry.metadata);
+  const git = gitStamp(entry.metadata.git);
+  const metadata = Object.entries(entry.metadata).filter(([k]) => !(k === "git" && git));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -258,6 +259,13 @@ export function EntryPage() {
                   {entry.tags.map((tag) => (
                     <TagChip key={tag} tag={tag} projectId={projectId} />
                   ))}
+                </span>
+              </MetaRow>
+            )}
+            {git && (
+              <MetaRow label="Commit">
+                <span className="font-mono text-xs" title={git.commit}>
+                  {gitLabel(git)}
                 </span>
               </MetaRow>
             )}

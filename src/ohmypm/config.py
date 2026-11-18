@@ -84,6 +84,9 @@ class Settings:
     # Context defaults from ``[context]``; project settings override them.
     context_tokens: dict[str, int] = field(default_factory=dict)
     stale_issue_days: int = DEFAULT_STALE_ISSUE_DAYS
+    # ``[git] stamps``: record the project's HEAD commit on new records and
+    # summary updates, and report in the context how far the summary is behind.
+    git_stamps: bool = True
     raw_config: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @property
@@ -140,6 +143,7 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
     general = raw.get("ohmypm") if isinstance(raw.get("ohmypm"), dict) else {}
     entries = raw.get("entries") if isinstance(raw.get("entries"), dict) else {}
     context = raw.get("context") if isinstance(raw.get("context"), dict) else {}
+    git = raw.get("git") if isinstance(raw.get("git"), dict) else {}
     extra_types = entries.get("extra_types", [])
     if not isinstance(extra_types, list):
         extra_types = []
@@ -177,6 +181,7 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
         stale_issue_days=stale_days
         if isinstance(stale_days, int) and not isinstance(stale_days, bool) and stale_days >= 0
         else DEFAULT_STALE_ISSUE_DAYS,
+        git_stamps=git.get("stamps") is not False,
         raw_config=raw,
     )
 

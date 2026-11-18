@@ -85,6 +85,7 @@ export type Summary = Record<SummarySection, string> & {
   revision: number;
   updated_by: string | null;
   updated_at: string | null;
+  git: { commit: string; branch: string | null } | null;
   is_empty: boolean;
 };
 
