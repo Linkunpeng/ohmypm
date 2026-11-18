@@ -58,3 +58,32 @@ def test_config_is_tolerant_of_foreign_keys(tmp_path: Path) -> None:
     assert s.web_port == 9999
     (cfg / "config.toml").write_text("this is [not toml")
     assert load_settings().web_port == 8737
+
+
+def test_newer_schema_is_refused_clearly(settings, db: Database) -> None:
+    from ohmypm.core.errors import SchemaTooNewError
+
+    with db.write() as s:
+        s.execute(text("UPDATE alembic_version SET version_num = '9999_from_the_future'"))
+    db.dispose()
+    with pytest.raises(SchemaTooNewError) as info:
+        Database(settings)
+    assert info.value.details["database_revision"] == "9999_from_the_future"
+    assert info.value.details["supported_head"] == SCHEMA_HEAD
+    assert info.value.exit_code == 7
+
+
+def test_cli_reports_newer_schema(settings, db: Database) -> None:
+    from typer.testing import CliRunner
+
+    from ohmypm.cli.common import reset_service
+    from ohmypm.cli.main import app
+
+    with db.write() as s:
+        s.execute(text("UPDATE alembic_version SET version_num = '9999_from_the_future'"))
+    db.dispose()
+    reset_service()
+    result = CliRunner().invoke(app, ["list"])
+    assert result.exit_code == 7
+    assert "newer than this ohmypm supports" in result.output
+    assert "Traceback" not in result.output

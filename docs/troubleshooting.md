@@ -5,6 +5,9 @@
 **`Error: No registered ohmypm project contains …`（退出码 3）**
 当前目录不在任何已注册项目中。在项目根目录运行 `ohmypm register`，或用 `--project <名称>` 指定。用 `ohmypm list --all` 查看包括已取消注册在内的项目。
 
+**`Error: The database schema (…) is newer than this ohmypm supports`（退出码 7）**
+数据库已被更新版本的 ohmypm 迁移过（例如装回了旧版本）。重新安装新版本即可；确实要使用旧版本时，用 `ohmypm restore` 恢复该版本时期的备份（每次安装新版本前建议先 `ohmypm backup`）。已经在运行的 MCP / Web 进程只在启动时检查 Schema，升级后请重启它们。
+
 **项目目录移动后找不到项目**
 `cd /new/path && ohmypm project relink /new/path --project <名称或 id>`。附件不受影响。
 

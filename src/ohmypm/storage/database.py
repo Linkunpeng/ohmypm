@@ -22,6 +22,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from ohmypm.config import Settings, ensure_private_dir
+from ohmypm.core.errors import SchemaTooNewError
 
 # Keep in sync with the newest file in storage/migrations/versions.
 # tests/test_migrations.py asserts that this matches Alembic's head.
@@ -85,10 +86,29 @@ def alembic_config(db_path: Path) -> Any:
     return cfg
 
 
+def _check_known_revision(revision: str | None, db_path: Path) -> None:
+    """Refuse a database migrated by a newer ohmypm instead of failing inside Alembic."""
+    if revision is None:
+        return
+    from alembic.script import ScriptDirectory
+
+    known = {
+        script.revision for script in ScriptDirectory.from_config(alembic_config(db_path)).walk_revisions()
+    }
+    if revision not in known:
+        raise SchemaTooNewError(
+            f"The database schema ({revision}) is newer than this ohmypm supports ({SCHEMA_HEAD}). "
+            "Install the newer ohmypm again, or restore a backup made with this version.",
+            details={"database_revision": revision, "supported_head": SCHEMA_HEAD, "database": str(db_path)},
+        )
+
+
 def run_migrations(engine: Engine, db_path: Path) -> None:
     """Upgrade the schema to head. Cheap no-op when already current."""
-    if _current_revision(engine) == SCHEMA_HEAD:
+    current = _current_revision(engine)
+    if current == SCHEMA_HEAD:
         return
+    _check_known_revision(current, db_path)
     lock_path = db_path.with_name(db_path.name + ".migrate.lock")
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:

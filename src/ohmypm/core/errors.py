@@ -52,5 +52,13 @@ class ConflictError(OhmypmError):
     http_status = 409
 
 
+class SchemaTooNewError(OhmypmError):
+    """The database was migrated by a newer ohmypm than the one running."""
+
+    code = "schema_too_new"
+    exit_code = 7
+    http_status = 503
+
+
 class AmbiguousReferenceError(ValidationError):
     code = "ambiguous_reference"
