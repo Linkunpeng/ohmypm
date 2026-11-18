@@ -112,7 +112,7 @@ def main() -> None:
     subprocess.run([*git, "init", "-q"], cwd=robot, check=True, env=env)
     subprocess.run([*git, "add", "."], cwd=robot, check=True, env=env)
     subprocess.run([*git, "commit", "-qm", "init"], cwd=robot, check=True, env=env)
-    for d in (".claude", ".codex", ".pi/agent", ".dsh"):
+    for d in (".claude", ".codex", ".pi/agent", ".dsh", ".gemini/config"):
         (home / d).mkdir(parents=True)
     (home / ".codex" / "AGENTS.md").write_text("# My Codex rules\n- keep it short\n")
     before = tree_digest(robot)
@@ -130,7 +130,7 @@ def main() -> None:
 
     # ---------------------------------------------------- agent instructions
     installed = js("agents", "install", cwd=home)
-    check("agents install for all four agents", {c["action"] for c in installed["changes"]} == {"installed"})
+    check("agents install for all five agents", {c["action"] for c in installed["changes"]} == {"installed"})
     codex_md = (home / ".codex" / "AGENTS.md").read_text()
     check("agents keep existing user instructions", codex_md.startswith("# My Codex rules"))
     check(
