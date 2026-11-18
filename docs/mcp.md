@@ -60,7 +60,7 @@ args = ["mcp"]
 | `pm_get_status` | 工作区是否属于已注册项目（先调用） | `workspace_path`（必填） |
 | `pm_list_projects` | 列出项目 | `include_archived` |
 | `pm_get_project` | 项目详情 | `project` / `workspace_path` |
-| `pm_get_context` | 确定性的项目上下文 | `mode`=brief/standard/full、`max_tokens`、`page`、`page_size`、`output`=markdown/json |
+| `pm_get_context` | 确定性的项目上下文 | `mode`=brief/standard/full、`max_tokens`（默认取项目设置）、`page`、`page_size`、`output`=markdown/json |
 | `pm_get_summary` | 摘要（各小节 + 等价 Markdown） | |
 | `pm_update_summary` | 更新摘要（只改提供的小节；`replace` 清空其他） | `markdown` 或 `overview`…`next_steps`、`author` |
 | `pm_add_entry` | 新增记录 | `title`（必填）、`type`、`content`、`status`、`author`、`metadata` |

@@ -37,8 +37,10 @@ Pass `workspace_path` (your absolute working directory) or `project` to every
 project tool - never rely on the server's own directory.
 Start with pm_get_status, then pm_get_context. Record only information with
 lasting value (milestones, non-trivial issues, decisions, durable knowledge,
-artifact usage) via pm_add_entry; never store secrets. Update the summary
-with pm_update_summary when the project state changed meaningfully.
+artifact usage) via pm_add_entry; never store secrets. Extend an existing record
+with pm_update_entry (append_content) instead of adding a near-duplicate, and
+resolve or obsolete open issues (also stale ones) that your work settles.
+Update the summary with pm_update_summary when the project state changed meaningfully.
 Write readable Markdown in the user's language. For longer, multi-topic records,
 use headings and focused bullet points; separate paragraphs with blank lines and
 mark paths/commands with backticks. Keep facts, failed attempts and uncertainty intact.
@@ -155,7 +157,12 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
             Field(description="brief: session start; standard: more records; full: paginated history."),
         ] = "brief",
         max_tokens: Annotated[
-            int | None, Field(description="Token budget (200-200000).", ge=200, le=200_000)
+            int | None,
+            Field(
+                description="Token budget (200-200000). Default: the project's setting for the mode.",
+                ge=200,
+                le=200_000,
+            ),
         ] = None,
         page: Annotated[int, Field(description="Page for full mode.", ge=1)] = 1,
         page_size: Annotated[int, Field(description="Records per page for full mode.", ge=1, le=200)] = 20,

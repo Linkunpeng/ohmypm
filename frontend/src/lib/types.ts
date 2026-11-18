@@ -127,5 +127,11 @@ export interface ContextResult {
   mode: string;
   markdown: string;
   budget: { max_tokens: number; used_tokens: number; truncated: boolean };
-  stats: { entry_count: number; by_type: Record<string, number>; open_issues: number };
+  stats: {
+    entry_count: number;
+    by_type: Record<string, number>;
+    open_issues: number;
+    stale_open_issues?: number;
+    stale_issue_days?: number;
+  };
 }

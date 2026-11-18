@@ -12,19 +12,26 @@ Modes:
 * ``standard`` - brief plus more recent records, decisions, knowledge and
                  artifacts.
 * ``full``     - summary plus all records, newest first, paginated.
+
+Budgets and the stale-issue threshold come from ``ContextOptions``: explicit
+arguments win over the project's ``metadata.context`` settings, which win over
+``[context]`` in ``config.toml`` and the built-in defaults. Open issues that
+have not been updated for ``stale_issue_days`` are listed compactly in their
+own section instead of taking budget from current work.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ohmypm.config import CONTEXT_TOKEN_KEYS, DEFAULT_STALE_ISSUE_DAYS, Settings
 from ohmypm.core import entries as entries_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import summaries as summaries_core
@@ -38,7 +45,10 @@ MODES: tuple[str, ...] = ("brief", "standard", "full")
 DEFAULT_MAX_TOKENS = {"brief": 3000, "standard": 8000, "full": 20000}
 MIN_MAX_TOKENS = 200
 MAX_MAX_TOKENS = 200_000
+MAX_STALE_ISSUE_DAYS = 3650
 IMPORTANT_TYPES = ("milestone", "decision", "issue", "artifact", "knowledge")
+PROJECT_SETTINGS_KEY = "context"
+SETTING_KEYS: tuple[str, ...] = (*CONTEXT_TOKEN_KEYS, "stale_issue_days")
 
 GUIDANCE = (
     "> Assembled deterministically by ohmypm from stored records (no AI). Entries are historical "
@@ -97,6 +107,80 @@ class ContextResult(BaseModel):
     markdown: str
 
 
+class ContextOptions(BaseModel):
+    """Effective context settings for one project."""
+
+    max_tokens: dict[str, int]
+    stale_issue_days: int
+    # Values set on the project itself (``metadata.context``), for display.
+    project_overrides: dict[str, int] = {}
+
+
+def _valid_override(key: str, value: Any) -> bool:
+    if not isinstance(value, int) or isinstance(value, bool):
+        return False
+    if key == "stale_issue_days":
+        return 0 <= value <= MAX_STALE_ISSUE_DAYS
+    return MIN_MAX_TOKENS <= value <= MAX_MAX_TOKENS
+
+
+def project_overrides(project: Project) -> dict[str, int]:
+    raw = (project.meta or {}).get(PROJECT_SETTINGS_KEY)
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if k in SETTING_KEYS and _valid_override(k, v)}
+
+
+def resolve_options(settings: Settings | None, project: Project) -> ContextOptions:
+    overrides = project_overrides(project)
+    tokens = {}
+    for mode in MODES:
+        key = f"{mode}_tokens"
+        value = overrides.get(key) or (settings.context_tokens.get(key) if settings else None)
+        value = value or DEFAULT_MAX_TOKENS[mode]
+        tokens[mode] = min(max(value, MIN_MAX_TOKENS), MAX_MAX_TOKENS)
+    stale = overrides.get(
+        "stale_issue_days", settings.stale_issue_days if settings else DEFAULT_STALE_ISSUE_DAYS
+    )
+    return ContextOptions(
+        max_tokens=tokens,
+        stale_issue_days=min(max(stale, 0), MAX_STALE_ISSUE_DAYS),
+        project_overrides=overrides,
+    )
+
+
+def validate_overrides(values: dict[str, int | None]) -> None:
+    for key, value in values.items():
+        if key not in SETTING_KEYS:
+            raise ValidationError(f"Unknown context setting '{key}'", details={"allowed": list(SETTING_KEYS)})
+        if value is not None and not _valid_override(key, value):
+            limits = (
+                f"0 and {MAX_STALE_ISSUE_DAYS}"
+                if key == "stale_issue_days"
+                else f"{MIN_MAX_TOKENS} and {MAX_MAX_TOKENS}"
+            )
+            raise ValidationError(f"{key} must be between {limits}")
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+def is_stale_issue(entry: Entry, days: int, now: datetime) -> bool:
+    """An open issue nobody has updated for ``days`` days (0 disables the check)."""
+    return days > 0 and now - _as_utc(entry.updated_at) >= timedelta(days=days)
+
+
+def open_issues(session: Session, project: Project, limit: int = 1000) -> list[Entry]:
+    stmt = (
+        select(Entry)
+        .where(Entry.project_id == project.id, Entry.type == "issue", Entry.status == "open")
+        .order_by(Entry.sequence.desc())
+        .limit(limit)
+    )
+    return list(session.scalars(stmt).all())
+
+
 def _is_unverified(entry: Entry) -> bool:
     meta = entry.meta or {}
     return meta.get("verified") is False or str(meta.get("confidence", "")).lower() in {
@@ -104,6 +188,23 @@ def _is_unverified(entry: Entry) -> bool:
         "unverified",
         "inferred",
     }
+
+
+def _context_entry(entry: Entry, content: str | None, cut: bool) -> ContextEntry:
+    return ContextEntry(
+        id=entry.id,
+        sequence=entry.sequence,
+        type=entry.type,
+        title=entry.title,
+        status=entry.status,
+        author=entry.author,
+        source=entry.source,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+        content=content,
+        content_truncated=cut,
+        unverified=_is_unverified(entry),
+    )
 
 
 def _entry_heading(entry: ContextEntry) -> str:
@@ -180,10 +281,12 @@ class ContextBuilder:
         max_tokens: int | None = None,
         page: int = 1,
         page_size: int = 20,
+        options: ContextOptions | None = None,
     ) -> None:
         if mode not in MODES:
             raise ValidationError(f"Unknown context mode '{mode}'", details={"allowed": list(MODES)})
-        max_tokens = max_tokens or DEFAULT_MAX_TOKENS[mode]
+        self.options = options or resolve_options(None, project)
+        max_tokens = max_tokens or self.options.max_tokens[mode]
         if not MIN_MAX_TOKENS <= max_tokens <= MAX_MAX_TOKENS:
             raise ValidationError(f"max_tokens must be between {MIN_MAX_TOKENS} and {MAX_MAX_TOKENS}")
         if page < 1 or not 1 <= page_size <= 200:
@@ -197,6 +300,8 @@ class ContextBuilder:
         self.summary = summaries_core.get_summary(session, project)
         self._included: set[str] = set()
         self._entry_count = projects_core.entry_count(session, project)
+        self._now = datetime.now(UTC)
+        self._open_issues: list[Entry] | None = None
 
     # ------------------------------------------------------------- queries
     def _query(
@@ -217,6 +322,23 @@ class ContextBuilder:
             stmt = stmt.where((Entry.status.is_(None)) | (Entry.status != "obsolete"))
         stmt = stmt.order_by(Entry.sequence.desc()).limit(limit).offset(offset)
         return list(self.session.scalars(stmt).all())
+
+    def _all_open_issues(self) -> list[Entry]:
+        if self._open_issues is None:
+            self._open_issues = open_issues(self.session, self.project)
+        return self._open_issues
+
+    def _is_stale(self, entry: Entry) -> bool:
+        return is_stale_issue(entry, self.options.stale_issue_days, self._now)
+
+    def _days_since(self, value: datetime) -> int:
+        return max((self._now - _as_utc(value)).days, 0)
+
+    def _stale_line(self, entry: ContextEntry) -> str:
+        return (
+            f"- #{entry.sequence} {entry.title} — opened {entry.created_at.strftime('%Y-%m-%d')}, "
+            f"last updated {self._days_since(entry.updated_at)}d ago"
+        )
 
     # ------------------------------------------------------------- fillers
     def _fill_text(self, field_name: str) -> Callable[[_Plan, _Budget, int], None]:
@@ -267,20 +389,7 @@ class ContextBuilder:
                     )
                     content = content or None
                     cut = cut or (content is None)
-                item = ContextEntry(
-                    id=entry.id,
-                    sequence=entry.sequence,
-                    type=entry.type,
-                    title=entry.title,
-                    status=entry.status,
-                    author=entry.author,
-                    source=entry.source,
-                    created_at=entry.created_at,
-                    updated_at=entry.updated_at,
-                    content=content,
-                    content_truncated=cut,
-                    unverified=_is_unverified(entry),
-                )
+                item = _context_entry(entry, content, cut)
                 rendered = _render_entry(item)
                 cost = estimate_tokens(rendered) + 2
                 spent += cost
@@ -312,12 +421,44 @@ class ContextBuilder:
 
         return fill
 
+    def _fill_stale(self) -> Callable[[_Plan, _Budget, int], None]:
+        def fill(plan: _Plan, budget: _Budget, allowance: int) -> None:
+            items = [e for e in self._all_open_issues() if self._is_stale(e) and e.id not in self._included]
+            if not items:
+                return
+            intro = (
+                f"_Not updated for {self.options.stale_issue_days}+ days. If your work touches one, check "
+                "whether it still applies: close it (`ohmypm log edit <#> --status resolved|obsolete "
+                '--append --content "..."`) or append new findings._'
+            )
+            spent = estimate_tokens(intro) + 2
+            if spent > min(allowance, budget.remaining):
+                plan.section.omitted_entries = len(items)
+                budget.truncated = True
+                return
+            # Structured entries (without body) for JSON consumers; Markdown
+            # renders them as one line each (see ``_stale_line``).
+            plan.section.text = intro
+            for index, entry in enumerate(items):
+                item = _context_entry(entry, None, bool(entry.content.strip()))
+                cost = estimate_tokens(self._stale_line(item)) + 1
+                if spent + cost > min(allowance, budget.remaining):
+                    plan.section.omitted_entries = len(items) - index
+                    budget.truncated = True
+                    break
+                plan.section.entries.append(item)
+                spent += cost
+                self._included.add(entry.id)
+            budget.used += spent
+
+        return fill
+
     # --------------------------------------------------------------- plans
     def _plans(self) -> list[_Plan]:
         """Sections in *priority* order; ``display`` fixes rendering order."""
         recent_n = 5 if self.mode == "brief" else 12
         per_entry = 160 if self.mode == "brief" else 400
-        open_issues = lambda: self._query(types=("issue",), statuses=("open",), limit=20)  # noqa: E731
+        open_issues = lambda: [e for e in self._all_open_issues() if not self._is_stale(e)][:20]  # noqa: E731
         important = lambda: self._query(types=IMPORTANT_TYPES, limit=recent_n)  # noqa: E731
         recent_any = lambda: self._query(limit=recent_n)  # noqa: E731
 
@@ -333,6 +474,7 @@ class ContextBuilder:
                 0.15,
                 self._fill_entries(open_issues, per_entry_tokens=120 if self.mode == "brief" else 300),
             ),
+            _Plan("stale_issues", "Stale Open Issues", 56, 0.08, self._fill_stale()),
             _Plan(
                 "recent_important",
                 "Recent Important Records",
@@ -499,8 +641,14 @@ class ContextBuilder:
 
     def _stats(self) -> dict[str, Any]:
         counts = entries_core.type_counts(self.session, self.project.id)
-        open_issues = len(self._query(types=("issue",), statuses=("open",), limit=1000))
-        return {"entry_count": self._entry_count, "by_type": counts, "open_issues": open_issues}
+        open_issues = self._all_open_issues()
+        return {
+            "entry_count": self._entry_count,
+            "by_type": counts,
+            "open_issues": len(open_issues),
+            "stale_open_issues": sum(1 for e in open_issues if self._is_stale(e)),
+            "stale_issue_days": self.options.stale_issue_days,
+        }
 
     def _header(self) -> str:
         p = self.project
@@ -534,8 +682,11 @@ class ContextBuilder:
             body = [f"## {title}"]
             if section.text:
                 body += ["", section.text]
-            for entry in section.entries:
-                body += ["", _render_entry(entry)]
+            if section.key == "stale_issues" and section.entries:
+                body += ["", "\n".join(self._stale_line(entry) for entry in section.entries)]
+            else:
+                for entry in section.entries:
+                    body += ["", _render_entry(entry)]
             if section.omitted_entries:
                 body += ["", f"_… {section.omitted_entries} more record(s) omitted by the token budget._"]
             out.append("\n".join(body))
@@ -557,7 +708,8 @@ def build_context(
     max_tokens: int | None = None,
     page: int = 1,
     page_size: int = 20,
+    options: ContextOptions | None = None,
 ) -> ContextResult:
     return ContextBuilder(
-        session, project, mode=mode, max_tokens=max_tokens, page=page, page_size=page_size
+        session, project, mode=mode, max_tokens=max_tokens, page=page, page_size=page_size, options=options
     ).build()

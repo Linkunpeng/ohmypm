@@ -1,6 +1,6 @@
 """Default global agent instructions (installed to ~/.config/ohmypm/agent-instructions.md)."""
 
-TEMPLATE_VERSION = 2
+TEMPLATE_VERSION = 3
 
 DEFAULT_INSTRUCTIONS = """\
 # ohmypm — project memory
@@ -15,14 +15,15 @@ id explicitly). If `ohmypm` is missing or fails, continue your work without it.
 1. Run `ohmypm status --json` in the workspace.
 2. If `"registered": true`, run `ohmypm context` and read it before starting.
    For more: `ohmypm context --mode standard`, `ohmypm search "<terms>"`,
-   `ohmypm log show <number>`.
+   `ohmypm log show <number>`. Note which open issues (including the
+   "Stale Open Issues" list) relate to your task.
 3. If the directory is not registered, work normally. Do not register
    projects yourself unless the user asks (`ohmypm register`).
 
 ## While working: record only what has lasting value
 
 ```bash
-ohmypm log add --type <type> --title "<specific title>" --author <agent-name> --stdin <<'EOF'
+ohmypm log add --type <type> --title "<specific title>" --author <client-name> --stdin <<'EOF'
 ## Result
 
 - <what was completed or confirmed>
@@ -50,8 +51,18 @@ EOF
 | `artifact`  | an important program, script or model: location, how to build, run and verify it           |
 | `note`      | other context worth keeping                                                                 |
 
-When an issue is solved: `ohmypm log edit <number> --status resolved --append --content "Fix: ..."`.
-Mark unverified ideas as such (e.g. `--meta confidence=hypothesis`); never present guesses as facts.
+- `--author` is your lowercase client name: `claude-code`, `codex`, `pi`, `dsh` or `agy`.
+- Update instead of duplicating: if a record already covers the topic (check the
+  context index or `ohmypm search`), add to it with
+  `ohmypm log edit <number> --append --content "..."` rather than adding a near-copy.
+- Close issues your work settles, including stale ones you verified:
+  `ohmypm log edit <number> --status resolved --append --content "Fix: ..."`, or
+  `--status obsolete` with the reason when it no longer applies.
+- Put reusable lessons (pitfalls, conventions, environment facts) into their own
+  `knowledge` record instead of burying them in a milestone; choices with
+  alternatives go into a `decision`.
+- Mark unverified ideas as such (e.g. `--meta confidence=hypothesis`); never present
+  guesses as facts.
 
 Do not record: simple commands, file reads, temporary debug output, repetitive
 intermediate states, or secrets of any kind (passwords, tokens, keys, credentials).
@@ -80,7 +91,9 @@ intermediate states, or secrets of any kind (passwords, tokens, keys, credential
 
 1. Record important results (`milestone`) and unresolved problems (`issue`)
    including the next steps.
-2. If the project state changed meaningfully, update the summary:
+2. Revisit the open issues related to your work: close what is settled and
+   append new findings to what is still open.
+3. If the project state changed meaningfully, update the summary:
    `ohmypm summary show`, revise, then `ohmypm summary set --stdin`
    (sections: Overview, Architecture, Current State, Important Decisions,
    Known Issues, Next Steps; only the sections you include are changed).

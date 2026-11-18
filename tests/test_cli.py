@@ -413,3 +413,24 @@ def test_real_entry_point_subprocess(workspace: Path, tmp_path: Path) -> None:
     assert bad.returncode == 4 and bad.stdout == "" and json.loads(bad.stderr)["error"]["code"] == "not_found"
     usage = run("log", "add", cwd=workspace)
     assert usage.returncode == 2
+
+
+def test_project_context_settings(cli, workspace: Path) -> None:
+    cli("register", cwd=workspace)
+    human = cli("project", "settings", cwd=workspace).stdout
+    assert "brief tokens:    3000" in human and "after 7 days" in human
+    data = js(
+        cli("project", "settings", "--brief-tokens", "5000", "--stale-days", "0", "--json", cwd=workspace)
+    )
+    assert data["max_tokens"]["brief"] == 5000 and data["stale_issue_days"] == 0
+    assert data["project_overrides"] == {"brief_tokens": 5000, "stale_issue_days": 0}
+    human = cli("project", "settings", cwd=workspace).stdout
+    assert "5000  (project)" in human and "disabled  (project)" in human
+    assert js(cli("context", "--json", cwd=workspace))["budget"]["max_tokens"] == 5000
+    data = js(cli("project", "settings", "--brief-tokens", "0", "--json", cwd=workspace))
+    assert data["max_tokens"]["brief"] == 3000 and data["project_overrides"] == {"stale_issue_days": 0}
+    assert js(cli("project", "settings", "--reset", "--json", cwd=workspace))["project_overrides"] == {}
+    r = cli("project", "settings", "--standard-tokens", "50", cwd=workspace, ok=False)
+    assert r.exit_code != 0 and "standard_tokens" in r.stderr
+    status = js(cli("status", "--json", cwd=workspace))
+    assert status["stale_open_issues"] == 0 and status["stale_issue_days"] == 7

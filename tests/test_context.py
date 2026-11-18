@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from ohmypm.config import load_settings
 from ohmypm.core.errors import ValidationError
 from ohmypm.core.schemas import EntryCreate, EntryUpdate, SummaryUpdate
 from ohmypm.core.service import MemoryService
@@ -171,3 +172,81 @@ def test_excerpt_strips_markdown_noise() -> None:
 
     md = "## 完成内容\n\n相机 **V4L2**。\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```mermaid\nflowchart LR\n```\n\n```cpp\nx\n```\n\n![shot](ohmypm-asset://x) [link](http://a)"
     assert excerpt(md) == "完成内容 相机 V4L2。 [table] [diagram] [code] [image: shot] link"
+
+
+def _age_entry(service: MemoryService, project_id: str, sequence: int, days: int) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    from ohmypm.storage.models import Entry
+
+    with service.db.write() as s:
+        s.execute(
+            update(Entry)
+            .where(Entry.project_id == project_id, Entry.sequence == sequence)
+            .values(updated_at=datetime.now(UTC) - timedelta(days=days))
+        )
+
+
+def test_stale_open_issues_are_listed_compactly(service: MemoryService, project_id: str) -> None:
+    _seed(service, project_id)
+    service.add_entry(
+        EntryCreate(type="issue", title="旧问题：偶发重启", content="很长的排查过程\n" * 50),
+        project=project_id,
+    )
+    _age_entry(service, project_id, 5, days=10)
+    ctx = service.context(project=project_id)
+    md = ctx.markdown
+    assert ctx.stats["open_issues"] == 2 and ctx.stats["stale_open_issues"] == 1
+    stale = next(s for s in ctx.sections if s.key == "stale_issues")
+    assert [e.sequence for e in stale.entries] == [5] and stale.entries[0].content is None
+    assert "- #5 旧问题：偶发重启 — opened " in md and "last updated 10d ago" in md
+    assert "很长的排查过程" not in md
+    # Shown once: not repeated as a full record in other sections.
+    assert "### #5" not in md
+    open_section = next(s for s in ctx.sections if s.key == "open_issues")
+    assert [e.sequence for e in open_section.entries] == [2]
+    assert md.index("## Open Issue Records") < md.index("## Stale Open Issues") < md.index("## Next Steps")
+    assert service.status(service.get_project(project=project_id).root_path)["stale_open_issues"] == 1
+
+    # Updating the issue makes it current again; 0 disables the check.
+    service.update_entry("#5", EntryUpdate(content="仍在复现"), project=project_id)
+    assert service.context(project=project_id).stats["stale_open_issues"] == 0
+    _age_entry(service, project_id, 5, days=10)
+    service.update_context_settings({"stale_issue_days": 0}, project=project_id)
+    ctx = service.context(project=project_id)
+    assert ctx.stats["stale_open_issues"] == 0
+    assert not any(s.key == "stale_issues" for s in ctx.sections)
+
+
+def test_context_settings_precedence(
+    service: MemoryService, project_id: str, settings, tmp_path: Path
+) -> None:
+    opts = service.context_settings(project=project_id)
+    assert opts.max_tokens == {"brief": 3000, "standard": 8000, "full": 20000}
+    assert opts.stale_issue_days == 7 and opts.project_overrides == {}
+
+    settings.config_dir.mkdir(parents=True, exist_ok=True)
+    settings.config_file.write_text("[context]\nbrief_tokens = 4000\nstale_issue_days = 30\n")
+    configured = MemoryService(load_settings(), service.db)
+    opts = configured.context_settings(project=project_id)
+    assert opts.max_tokens["brief"] == 4000 and opts.stale_issue_days == 30
+
+    opts = configured.update_context_settings({"brief_tokens": 6000}, project=project_id)
+    assert opts.max_tokens["brief"] == 6000 and opts.project_overrides == {"brief_tokens": 6000}
+    assert configured.context(project=project_id).budget.max_tokens == 6000
+    assert configured.context(project=project_id, max_tokens=1000).budget.max_tokens == 1000
+    # Other project metadata is preserved.
+    assert configured.get_project(project=project_id).metadata == {"context": {"brief_tokens": 6000}}
+
+    opts = configured.update_context_settings({"brief_tokens": None}, project=project_id)
+    assert opts.max_tokens["brief"] == 4000 and opts.project_overrides == {}
+    assert "context" not in configured.get_project(project=project_id).metadata
+
+    configured.update_context_settings({"standard_tokens": 9000}, project=project_id)
+    assert configured.update_context_settings({}, reset=True, project=project_id).project_overrides == {}
+
+    for bad in ({"brief_tokens": 100}, {"stale_issue_days": -1}, {"bogus": 1}):
+        with pytest.raises(ValidationError):
+            configured.update_context_settings(bad, project=project_id)

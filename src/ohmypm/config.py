@@ -21,6 +21,8 @@ from typing import Any
 DEFAULT_WEB_HOST = "127.0.0.1"
 DEFAULT_WEB_PORT = 8737
 DEFAULT_MAX_UPLOAD_MB = 20
+DEFAULT_STALE_ISSUE_DAYS = 7
+CONTEXT_TOKEN_KEYS = ("brief_tokens", "standard_tokens", "full_tokens")
 _TYPE_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
@@ -58,6 +60,9 @@ class Settings:
     max_upload_bytes: int = DEFAULT_MAX_UPLOAD_MB * 1024 * 1024
     default_author: str | None = None
     extra_entry_types: tuple[str, ...] = ()
+    # Context defaults from ``[context]``; project settings override them.
+    context_tokens: dict[str, int] = field(default_factory=dict)
+    stale_issue_days: int = DEFAULT_STALE_ISSUE_DAYS
     raw_config: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 
     @property
@@ -113,6 +118,7 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
     assets = raw.get("assets") if isinstance(raw.get("assets"), dict) else {}
     general = raw.get("ohmypm") if isinstance(raw.get("ohmypm"), dict) else {}
     entries = raw.get("entries") if isinstance(raw.get("entries"), dict) else {}
+    context = raw.get("context") if isinstance(raw.get("context"), dict) else {}
     extra_types = entries.get("extra_types", [])
     if not isinstance(extra_types, list):
         extra_types = []
@@ -121,6 +127,7 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
     port = web.get("port", DEFAULT_WEB_PORT)
     max_mb = assets.get("max_upload_mb", DEFAULT_MAX_UPLOAD_MB)
     author = general.get("author")
+    stale_days = context.get("stale_issue_days", DEFAULT_STALE_ISSUE_DAYS)
 
     return Settings(
         data_dir=data_dir,
@@ -134,6 +141,14 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
         extra_entry_types=tuple(
             t.strip().lower() for t in extra_types if isinstance(t, str) and _TYPE_RE.match(t.strip().lower())
         ),
+        context_tokens={
+            key: value
+            for key in CONTEXT_TOKEN_KEYS
+            if isinstance(value := context.get(key), int) and not isinstance(value, bool) and value > 0
+        },
+        stale_issue_days=stale_days
+        if isinstance(stale_days, int) and not isinstance(stale_days, bool) and stale_days >= 0
+        else DEFAULT_STALE_ISSUE_DAYS,
         raw_config=raw,
     )
 

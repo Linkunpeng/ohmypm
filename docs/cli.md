@@ -25,12 +25,16 @@
 
 ```bash
 ohmypm register [PATH] [--name N] [--description D]   # 默认当前目录；重复执行返回已有项目
-ohmypm status                                         # 是否属于已注册项目、相对路径、记录数、未解决 issue
+ohmypm status                                         # 是否属于已注册项目、相对路径、记录数、未解决 issue（含久未更新数）
 ohmypm list [--all]                                   # --all 包含已取消注册的项目
 ohmypm project info
 ohmypm project relink /new/path [--project P]         # 项目目录移动/重新克隆后
 ohmypm project rename "Robot WS"
 ohmypm project describe "ROS 2 巡检机器人" | --file f | --stdin
+ohmypm project settings                               # 查看本项目生效的上下文预算与久未更新阈值
+ohmypm project settings --brief-tokens 5000 --stale-days 14   # 项目级覆盖；token 设为 0 恢复默认
+ohmypm project settings --stale-days 0                # 不再区分久未更新的 issue
+ohmypm project settings --reset                       # 清除全部项目级覆盖
 ohmypm unregister                                     # 保留历史，重新 register 可恢复
 ohmypm unregister --purge --yes                       # 永久删除该项目的全部 ohmypm 数据
 ```
@@ -95,6 +99,9 @@ ohmypm context --mode standard          # 默认 8000 token：更多近期记录
 ohmypm context --mode full --page 2 --page-size 20   # 摘要 + 全部记录（最新在前）分页
 ohmypm context --max-tokens 1500 --json
 ```
+
+- 默认预算按优先级取值：`--max-tokens` → 项目设置（`ohmypm project settings`）→ `config.toml` 的 `[context]` → 内置默认（3000 / 8000 / 20000）。
+- 超过阈值（默认 7 天）未更新的 open issue 不再展开正文，而是在“Stale Open Issues”小节中逐条列出序号、标题、打开日期和距上次更新的天数，并提示 Agent 核实后关闭或追加新发现。追加内容或修改状态都会刷新更新时间。JSON 中该小节的 `entries` 不含正文，`stats` 增加 `stale_open_issues` 与 `stale_issue_days`。
 
 ## 搜索
 

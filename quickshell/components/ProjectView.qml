@@ -10,10 +10,16 @@ ColumnLayout {
     readonly property var context: detail?.context ?? null
     readonly property var summary: context?.summary ?? null
     readonly property var recent: detail?.recent ?? []
-    readonly property var openIssues: (context?.sections ?? []).find(s => s.key === "open_issues")?.entries ?? []
+    // Current open issues first, then the stale ones (listed without body by `context`).
+    readonly property var openIssues: sectionEntries("open_issues").concat(sectionEntries("stale_issues"))
     readonly property int openIssueCount: context?.stats?.open_issues ?? openIssues.length
+    readonly property int staleIssueCount: context?.stats?.stale_open_issues ?? 0
     // Days with at least one record (among the loaded records).
     readonly property int activeDays: new Set(recent.map(e => Style.startOfDay(e.created_at).getTime())).size
+
+    function sectionEntries(key: string): var {
+        return (context?.sections ?? []).find(s => s.key === key)?.entries ?? [];
+    }
 
     readonly property var tabs: [
         { title: "概览", glyph: Style.glyphs.overview },

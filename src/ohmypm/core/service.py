@@ -17,11 +17,12 @@ from sqlalchemy.orm import Session
 
 from ohmypm.config import Settings, load_settings
 from ohmypm.core import assets as assets_core
+from ohmypm.core import context as context_core
 from ohmypm.core import entries as entries_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import search as search_core
 from ohmypm.core import summaries as summaries_core
-from ohmypm.core.context import ContextResult, build_context
+from ohmypm.core.context import ContextOptions, ContextResult, build_context
 from ohmypm.core.errors import ValidationError
 from ohmypm.core.schemas import (
     AssetOut,
@@ -71,6 +72,13 @@ class MemoryService:
             _, open_total = entries_core.list_entries(
                 s, project_ids=[project.id], types=["issue"], statuses=["open"], limit=1
             )
+            stale_days = context_core.resolve_options(self.settings, project).stale_issue_days
+            now = datetime.now().astimezone()
+            stale_total = sum(
+                1
+                for e in context_core.open_issues(s, project)
+                if context_core.is_stale_issue(e, stale_days, now)
+            )
             return {
                 "registered": True,
                 "path": resolved,
@@ -79,6 +87,8 @@ class MemoryService:
                 "summary_exists": not summary.is_empty,
                 "summary_updated_at": summary.updated_at.isoformat() if summary.updated_at else None,
                 "open_issues": open_total,
+                "stale_open_issues": stale_total,
+                "stale_issue_days": stale_days,
             }
 
     def register(
@@ -347,7 +357,47 @@ class MemoryService:
     ) -> ContextResult:
         with self.db.read() as s:
             target = self._project(s, project, path)
-            return build_context(s, target, mode=mode, max_tokens=max_tokens, page=page, page_size=page_size)
+            return build_context(
+                s,
+                target,
+                mode=mode,
+                max_tokens=max_tokens,
+                page=page,
+                page_size=page_size,
+                options=context_core.resolve_options(self.settings, target),
+            )
+
+    def context_settings(
+        self, *, project: str | None = None, path: str | os.PathLike[str] | None = None
+    ) -> ContextOptions:
+        with self.db.read() as s:
+            return context_core.resolve_options(self.settings, self._project(s, project, path))
+
+    def update_context_settings(
+        self,
+        values: dict[str, int | None],
+        *,
+        reset: bool = False,
+        project: str | None = None,
+        path: str | os.PathLike[str] | None = None,
+    ) -> ContextOptions:
+        """Set (or with ``None`` remove) project overrides; ``reset`` removes all first."""
+        context_core.validate_overrides(values)
+        with self.db.write() as s:
+            target = self._project(s, project, path)
+            current = {} if reset else context_core.project_overrides(target)
+            for key, value in values.items():
+                if value is None:
+                    current.pop(key, None)
+                else:
+                    current[key] = value
+            meta = dict(target.meta or {})
+            if current:
+                meta[context_core.PROJECT_SETTINGS_KEY] = current
+            else:
+                meta.pop(context_core.PROJECT_SETTINGS_KEY, None)
+            projects_core.update_project(s, target, metadata=meta)
+            return context_core.resolve_options(self.settings, target)
 
     # ------------------------------------------------------------- search
     def search(

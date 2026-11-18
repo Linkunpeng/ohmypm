@@ -131,7 +131,8 @@ Page {
         visible: page.view.openIssueCount > 0
         glyph: Style.type("issue").glyph
         tint: Style.urgent
-        title: "未解决的问题 (" + page.view.openIssueCount + ")"
+        title: "未解决的问题 (" + page.view.openIssueCount
+            + (page.view.staleIssueCount > 0 ? " · " + page.view.staleIssueCount + " 个超过 " + (page.view.context?.stats?.stale_issue_days ?? 7) + " 天未更新" : "") + ")"
         Repeater {
             model: page.view.openIssues
             delegate: EntryRow {

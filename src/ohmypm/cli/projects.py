@@ -111,7 +111,8 @@ def status(cwd: CwdOpt = None, json_: JsonOpt = False) -> None:
     out(f"Root:      {p['root_path']}")
     if info["relative_path"] != ".":
         out(f"Subpath:   {info['relative_path']}")
-    out(f"Records:   {p['entry_count']}  (open issues: {info['open_issues']})")
+    stale = f", {info['stale_open_issues']} stale" if info["stale_open_issues"] else ""
+    out(f"Records:   {p['entry_count']}  (open issues: {info['open_issues']}{stale})")
     out(
         f"Summary:   {'yes, updated ' + local_time(info['summary_updated_at']) if info['summary_exists'] else 'none'}"
     )
@@ -206,3 +207,62 @@ def project_describe(
         emit_json(p)
         return
     out(f"Description updated for '{p.name}'")
+
+
+@project_app.command("settings")
+def project_settings(
+    brief_tokens: Annotated[
+        int | None, typer.Option("--brief-tokens", help="Default budget of `context` (0: use the default).")
+    ] = None,
+    standard_tokens: Annotated[
+        int | None,
+        typer.Option("--standard-tokens", help="Default budget of `context --mode standard` (0: default)."),
+    ] = None,
+    full_tokens: Annotated[
+        int | None,
+        typer.Option("--full-tokens", help="Default budget of `context --mode full` (0: default)."),
+    ] = None,
+    stale_days: Annotated[
+        int | None,
+        typer.Option(
+            "--stale-days",
+            help="Open issues not updated for this many days are listed as stale (0 disables).",
+        ),
+    ] = None,
+    reset: Annotated[bool, typer.Option("--reset", help="Remove all project overrides first.")] = False,
+    project: ProjectOpt = None,
+    cwd: CwdOpt = None,
+    json_: JsonOpt = False,
+) -> None:
+    """Show or change the project's context settings (token budgets, stale-issue threshold).
+
+    Project values override `[context]` in config.toml. Without options the
+    effective settings are shown.
+    """
+    values: dict[str, int | None] = {}
+    for key, value in (
+        ("brief_tokens", brief_tokens),
+        ("standard_tokens", standard_tokens),
+        ("full_tokens", full_tokens),
+    ):
+        if value is not None:
+            values[key] = value or None
+    if stale_days is not None:
+        values["stale_issue_days"] = stale_days
+    service = get_service()
+    scope = {"project": project, "path": None if project else workspace(cwd)}
+    if values or reset:
+        options = service.update_context_settings(values, reset=reset, **scope)
+    else:
+        options = service.context_settings(**scope)
+    if json_:
+        emit_json(options)
+        return
+
+    def origin(key: str) -> str:
+        return "  (project)" if key in options.project_overrides else ""
+
+    for mode, tokens in options.max_tokens.items():
+        out(f"{mode + ' tokens:':<17}{tokens}{origin(f'{mode}_tokens')}")
+    days = options.stale_issue_days
+    out(f"{'stale issues:':<17}{f'after {days} days' if days else 'disabled'}{origin('stale_issue_days')}")
