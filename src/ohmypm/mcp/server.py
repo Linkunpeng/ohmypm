@@ -29,6 +29,7 @@ from ohmypm.core.dates import parse_when
 from ohmypm.core.errors import OhmypmError, ValidationError
 from ohmypm.core.schemas import BUILTIN_ENTRY_TYPES, EntryCreate, EntryUpdate, LinkIn, SummaryUpdate
 from ohmypm.core.service import MemoryService
+from ohmypm.core.similar import DEFAULT_MIN_SCORE
 from ohmypm.core.summaries import render_summary_markdown
 
 SERVER_INSTRUCTIONS = """\
@@ -37,8 +38,9 @@ Pass `workspace_path` (your absolute working directory) or `project` to every
 project tool - never rely on the server's own directory.
 Start with pm_get_status, then pm_get_context. Record only information with
 lasting value (milestones, non-trivial issues, decisions, durable knowledge,
-artifact usage) via pm_add_entry; never store secrets. Extend an existing record
-with pm_update_entry (append_content) instead of adding a near-duplicate, and
+artifact usage) via pm_add_entry; never store secrets. Before adding an issue, check
+pm_find_similar; extend an existing record with pm_update_entry
+(append_content) instead of adding a near-duplicate, and
 resolve or obsolete open issues (also stale ones) that your work settles.
 Tag records by subsystem/device/version (reuse the tags listed in the context)
 and link them: `links` with kind fixes (resolves the issue), supersedes (marks
@@ -255,7 +257,14 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
         if not sections.provided() and not replace:
             raise ValidationError("Provide `markdown` or at least one section")
         summary, changed = service.set_summary(sections, replace=replace, changed_by=author, **scope)
-        return {"changed": changed, "summary": summary.model_dump(mode="json")}
+        result: dict[str, Any] = {"changed": changed, "summary": summary.model_dump(mode="json")}
+        if cut := service.summary_cut(**scope):
+            result["summary_sections_cut"] = cut
+            result["hint"] = (
+                "The default context cuts off these sections. Condense them: keep what is still true "
+                "and move history into records."
+            )
+        return result
 
     @mcp.tool(annotations=writes)
     @_tool_errors
@@ -428,6 +437,42 @@ def build_server(service: MemoryService | None = None) -> MCPServer:
             **scope,
         )
         return page.model_dump(mode="json")
+
+    @mcp.tool(annotations=read_only)
+    @_tool_errors
+    def pm_find_similar(
+        project: ProjectArg = None,
+        workspace_path: WorkspaceArg = None,
+        entry: Annotated[
+            str | None, Field(description="Compare with this record ('12', '#12' or id) instead of a draft.")
+        ] = None,
+        title: Annotated[
+            str | None, Field(description="Draft title, e.g. of an issue you are about to add.")
+        ] = None,
+        content: Annotated[str | None, Field(description="Draft Markdown body (optional).")] = None,
+        tags: TagsArg = None,
+        types: Annotated[list[str] | None, Field(description="Only compare with these entry types.")] = None,
+        statuses: Annotated[
+            list[Status] | None, Field(description="Only compare with these statuses, e.g. ['open'].")
+        ] = None,
+        limit: Annotated[int, Field(ge=1, le=50)] = 5,
+        min_score: Annotated[
+            float, Field(ge=0, le=1, description="Minimum similarity (0-1).")
+        ] = DEFAULT_MIN_SCORE,
+    ) -> dict[str, Any]:
+        """Find similar or related records (title, body, tags; deterministic). Use before adding an issue: extend a match instead of duplicating it."""
+        hits = service.similar_entries(
+            entry,
+            title=title,
+            content=content,
+            tags=tags,
+            types=types,
+            statuses=statuses,  # type: ignore[arg-type]
+            limit=limit,
+            min_score=min_score,
+            **_scope(project, workspace_path),
+        )
+        return {"items": [h.model_dump(mode="json") for h in hits]}
 
     @mcp.tool(annotations=writes)
     @_tool_errors

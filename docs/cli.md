@@ -35,6 +35,7 @@ ohmypm project describe "ROS 2 巡检机器人" | --file f | --stdin
 ohmypm project settings                               # 查看本项目生效的上下文预算与久未更新阈值
 ohmypm project settings --brief-tokens 5000 --stale-days 14   # 项目级覆盖；token 设为 0 恢复默认
 ohmypm project settings --stale-days 0                # 不再区分久未更新的 issue
+ohmypm project settings --old-commits 50              # 写于 50 个提交之前的记录才标为“commits ago”（0 关闭）
 ohmypm project settings --reset                       # 清除全部项目级覆盖
 ohmypm unregister                                     # 保留历史，重新 register 可恢复
 ohmypm unregister --purge --yes                       # 永久删除该项目的全部 ohmypm 数据
@@ -82,6 +83,20 @@ ohmypm tags [--all]                           # 使用中的标签及记录数
 ```
 
 - **标签**：统一转为小写，不能包含空格；可用字母（含中文）、数字和 `_ - . : /  +`，以字母或数字开头，最长 64 个字符，每条记录最多 20 个。可以用 `key:value` 表示维度，例如 `device:…`、`v3.6.0`。标签修改会产生修订，`log restore` 时一并恢复。
+### 相似记录
+
+```bash
+ohmypm log similar -t "USB 枚举失败，ADB 连不上" -T issue     # 新建 issue 前先查有没有已有记录
+ohmypm log similar -t "…" -c "补充正文" --tag device:a0ac1   # 正文和标签也参与比较
+ohmypm log similar 45                                          # 与 #45 相似或相关的记录
+ohmypm log similar 45 -s open --min-score 0.2 -n 10 --json
+```
+
+- 确定性计算，不使用 AI：标题和正文切成词（拉丁词、版本号、标识符，以及中日韩字符的二元组），按本项目记录统计 TF-IDF，所以在项目里处处出现的词（设备号、产品名）权重很低。
+- 分数（0–1）由三部分加权：标题余弦相似度 0.55、正文覆盖度 0.3（草稿正文中的词有多少出现在候选记录中，适合短草稿对长记录）、共同标签 0.15；只计入查询中实际提供的部分。
+- 默认阈值 0.25、最多 5 条、不含 obsolete 记录（`--include-obsolete` 包含）。用 copix-app 的 60 条真实记录校准：模拟重复的 issue 得分 0.27–0.55 且排第一，不相关主题约为 0；已有记录之间最相似的一对约 0.3，通常是同一主题的连续工作，所以结果是“相似或相关”，由 Agent 判断是追加还是关联。
+- 输出中的 `already linked` 表示两条记录之间已有关联（含正文 `#N`）。
+
 - **关联**：只能指向同一项目的记录。`--fixes N` 要求 N 是 issue，并在它处于 open 时标为 resolved；`--supersedes N` 把 N 标为 obsolete。这两种状态变化都是正常编辑，会保留修订。`--relates N` 只建立关联。
 - **自动提及**：正文中的 `#N`（代码块和行内代码除外）会自动关联到第 N 条记录，正文修改后重新计算。升级数据库时会为已有记录补建这类关联。
 - `log show` 显示双向关联（如 `fixes: #12`、`fixed by: #20`、`mentioned in: #31`）。context 在每条记录下列出 `_Links: …_`，并在开头列出使用中的标签。
@@ -132,6 +147,8 @@ ohmypm context --max-tokens 1500 --json
 
 - 默认预算按优先级取值：`--max-tokens` → 项目设置（`ohmypm project settings`）→ `config.toml` 的 `[context]` → 内置默认（3000 / 8000 / 20000）。
 - 超过阈值（默认 7 天）未更新的 open issue 不再展开正文，而是在“Stale Open Issues”小节中逐条列出序号、标题、打开日期和距上次更新的天数，并提示 Agent 核实后关闭或追加新发现。追加内容或修改状态都会刷新更新时间。JSON 中该小节的 `entries` 不含正文，`stats` 增加 `stale_open_issues` 与 `stale_issue_days`。
+- 记录的元信息行显示写入时的提交（`at cf637fb`）；距 HEAD 已有 `old_record_commits`（默认 20，0 关闭）个以上提交时显示为 `at cf637fb (37 commits ago)`，提醒 Agent 先对照代码核实。JSON 中每条记录带 `commit`、`commits_since`、`outdated`。
+- 摘要某个小节被预算截断时，头部会多一行“Summary sections cut off by the brief budget: …”，`stats.summary_sections_cut` 列出小节、全文 token 数和实际显示的 token 数（full 模式不报告）。`summary set`（CLI 输出到 stderr）、MCP `pm_update_summary`、HTTP `PUT …/summary` 和 Web 摘要页在保存后同样提示，判断依据都是默认的 brief 上下文。
 - 摘要更新后若又有新记录或新提交，头部会多一行“Since the summary: N commit(s) on HEAD … and M new record(s)”，提醒 Agent 核对并更新摘要。`stats` 中对应 `summary_commits_behind` 与 `records_since_summary`，`ohmypm status --json` 也包含这两项及 `summary_git`。
 
 ## Git 提交标记
@@ -177,3 +194,5 @@ ohmypm backup [--output FILE]
 ohmypm restore FILE --yes
 ohmypm doctor [--json]
 ```
+
+`doctor` 还会列出本用户正在运行的 `ohmypm mcp` / `ohmypm web` 进程（读取 Linux `/proc`）：进程启动时间早于它所加载的 ohmypm 包中最新的 `.py` 文件时标为 `OUTDATED`，并给出重启方式（systemd 服务给出 `systemctl --user restart <unit>`，MCP 需重启启动它的 Agent 会话）。包的位置按进程命令行中的虚拟环境查找，支持可编辑安装；找不到时显示 `unknown`。

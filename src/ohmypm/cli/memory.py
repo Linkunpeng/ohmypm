@@ -114,10 +114,17 @@ def summary_set(
         )
     else:
         summary, changed = service.set_summary_markdown(text, replace=replace, changed_by=author, **scope)
+    cut = service.summary_cut(**scope)
     if json_:
-        emit_json({"changed": changed, "summary": summary})
+        emit_json({"changed": changed, "summary": summary, "summary_sections_cut": cut})
         return
     out(f"Summary updated (revision {summary.revision})." if changed else "Summary unchanged.")
+    if cut:
+        names = ", ".join(f"{c['title']} (~{c['tokens']} tokens, ~{c['shown_tokens']} shown)" for c in cut)
+        err(
+            f"Note: `ohmypm context` cuts off {names}. Condense these sections: keep what is still "
+            "true and move history into records."
+        )
 
 
 @summary_app.command("history")

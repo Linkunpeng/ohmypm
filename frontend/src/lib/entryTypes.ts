@@ -32,6 +32,12 @@ export function parseTags(text: string): string[] {
   return [...new Set(text.split(/[\s,，]+/).map((t) => t.trim().toLowerCase()).filter(Boolean))].sort();
 }
 
+/** `#12`, `12` → `#12`; anything else is returned trimmed (an entry id). */
+export function linkTarget(text: string): string {
+  const value = text.trim();
+  return /^#?\d+$/.test(value) ? `#${value.replace(/^#/, "")}` : value;
+}
+
 export const STATUS_LABEL: Record<string, string> = {
   open: "Open",
   resolved: "Resolved",

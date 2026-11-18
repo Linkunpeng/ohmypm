@@ -50,6 +50,39 @@ export interface EntryLink {
   status: EntryStatus | null;
 }
 
+/** A link that can be set by hand ("mentions" come from `#N` in the body). */
+export type ExplicitLinkKind = Exclude<LinkKind, "mentions">;
+
+export interface LinkInput {
+  target: string;
+  kind: ExplicitLinkKind;
+}
+
+/** A record similar to another record or a draft (see `ohmypm log similar`). */
+export interface SimilarEntry {
+  entry_id: string;
+  sequence: number;
+  type: string;
+  title: string;
+  status: EntryStatus | null;
+  created_at: string;
+  updated_at: string;
+  tags: string[];
+  score: number;
+  title_score: number;
+  body_score: number | null;
+  shared_tags: string[];
+  linked: boolean;
+}
+
+/** A summary section the default (brief) context cannot show in full. */
+export interface SummaryCut {
+  section: string;
+  title: string;
+  tokens: number;
+  shown_tokens: number;
+}
+
 export interface TagCount {
   tag: string;
   count: number;
@@ -155,5 +188,8 @@ export interface ContextResult {
     open_issues: number;
     stale_open_issues?: number;
     stale_issue_days?: number;
+    records_since_summary?: number | null;
+    summary_commits_behind?: number | null;
+    summary_sections_cut?: SummaryCut[];
   };
 }

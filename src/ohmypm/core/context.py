@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ohmypm.config import CONTEXT_TOKEN_KEYS, DEFAULT_STALE_ISSUE_DAYS, Settings
+from ohmypm.config import CONTEXT_TOKEN_KEYS, DEFAULT_OLD_RECORD_COMMITS, DEFAULT_STALE_ISSUE_DAYS, Settings
 from ohmypm.core import entries as entries_core
 from ohmypm.core import gitinfo
 from ohmypm.core import links as links_core
@@ -48,10 +48,16 @@ DEFAULT_MAX_TOKENS = {"brief": 3000, "standard": 8000, "full": 20000}
 MIN_MAX_TOKENS = 200
 MAX_MAX_TOKENS = 200_000
 MAX_STALE_ISSUE_DAYS = 3650
+MAX_OLD_RECORD_COMMITS = 100_000
 MAX_HEADER_TAGS = 15
 IMPORTANT_TYPES = ("milestone", "decision", "issue", "artifact", "knowledge")
 PROJECT_SETTINGS_KEY = "context"
-SETTING_KEYS: tuple[str, ...] = (*CONTEXT_TOKEN_KEYS, "stale_issue_days")
+SETTING_KEYS: tuple[str, ...] = (*CONTEXT_TOKEN_KEYS, "stale_issue_days", "old_record_commits")
+# Allowed ranges of the non-token settings (0 disables the feature).
+_SETTING_RANGES = {
+    "stale_issue_days": (0, MAX_STALE_ISSUE_DAYS),
+    "old_record_commits": (0, MAX_OLD_RECORD_COMMITS),
+}
 
 GUIDANCE = (
     "> Assembled deterministically by ohmypm from stored records (no AI). Entries are historical "
@@ -74,8 +80,11 @@ class ContextEntry(BaseModel):
     content_truncated: bool = False
     unverified: bool = False
     tags: list[str] = []
-    # Short commit the project was on when the record was written.
+    # Short commit the project was on when the record was written, how many
+    # commits HEAD has moved since, and whether that passes the threshold.
     commit: str | None = None
+    commits_since: int | None = None
+    outdated: bool = False
     # Rendered link groups, e.g. "fixes #9" or "mentioned in #45, #50".
     links: list[str] = []
 
@@ -120,6 +129,8 @@ class ContextOptions(BaseModel):
 
     max_tokens: dict[str, int]
     stale_issue_days: int
+    # Records written this many commits before HEAD are flagged (0 disables).
+    old_record_commits: int = DEFAULT_OLD_RECORD_COMMITS
     # Values set on the project itself (``metadata.context``), for display.
     project_overrides: dict[str, int] = {}
 
@@ -127,9 +138,8 @@ class ContextOptions(BaseModel):
 def _valid_override(key: str, value: Any) -> bool:
     if not isinstance(value, int) or isinstance(value, bool):
         return False
-    if key == "stale_issue_days":
-        return 0 <= value <= MAX_STALE_ISSUE_DAYS
-    return MIN_MAX_TOKENS <= value <= MAX_MAX_TOKENS
+    low, high = _SETTING_RANGES.get(key, (MIN_MAX_TOKENS, MAX_MAX_TOKENS))
+    return low <= value <= high
 
 
 def project_overrides(project: Project) -> dict[str, int]:
@@ -150,9 +160,13 @@ def resolve_options(settings: Settings | None, project: Project) -> ContextOptio
     stale = overrides.get(
         "stale_issue_days", settings.stale_issue_days if settings else DEFAULT_STALE_ISSUE_DAYS
     )
+    old_commits = overrides.get(
+        "old_record_commits", settings.old_record_commits if settings else DEFAULT_OLD_RECORD_COMMITS
+    )
     return ContextOptions(
         max_tokens=tokens,
         stale_issue_days=min(max(stale, 0), MAX_STALE_ISSUE_DAYS),
+        old_record_commits=min(max(old_commits, 0), MAX_OLD_RECORD_COMMITS),
         project_overrides=overrides,
     )
 
@@ -162,12 +176,8 @@ def validate_overrides(values: dict[str, int | None]) -> None:
         if key not in SETTING_KEYS:
             raise ValidationError(f"Unknown context setting '{key}'", details={"allowed": list(SETTING_KEYS)})
         if value is not None and not _valid_override(key, value):
-            limits = (
-                f"0 and {MAX_STALE_ISSUE_DAYS}"
-                if key == "stale_issue_days"
-                else f"{MIN_MAX_TOKENS} and {MAX_MAX_TOKENS}"
-            )
-            raise ValidationError(f"{key} must be between {limits}")
+            low, high = _SETTING_RANGES.get(key, (MIN_MAX_TOKENS, MAX_MAX_TOKENS))
+            raise ValidationError(f"{key} must be between {low} and {high}")
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -271,7 +281,11 @@ def _entry_meta_line(entry: ContextEntry) -> str:
     if entry.source:
         parts.append(f"via {entry.source}")
     if entry.commit:
-        parts.append(f"at {entry.commit}")
+        parts.append(
+            f"at {entry.commit} ({entry.commits_since} commits ago)"
+            if entry.outdated
+            else f"at {entry.commit}"
+        )
     if entry.updated_at and (entry.updated_at - entry.created_at).total_seconds() > 60:
         parts.append(f"edited {entry.updated_at.strftime('%Y-%m-%d')}")
     if entry.tags:
@@ -366,6 +380,9 @@ class ContextBuilder:
                 session, project_ids=[project.id], tags=[self.tag], limit=1
             )
         self._outgoing, self._incoming = links_core.project_links(session, project.id)
+        self._check_git = check_git
+        self._cut_summary: list[dict[str, Any]] = []
+        self._commit_distance: dict[str, int | None] = {}
         # What happened since the summary last changed (None when unknown).
         self._records_since_summary: int | None = None
         self._summary_commits_behind: int | None = None
@@ -380,6 +397,24 @@ class ContextBuilder:
 
     def _links(self, entry: Entry) -> list[str]:
         return link_groups(self._outgoing.get(entry.id, []), self._incoming.get(entry.id, []))
+
+    def _commits_since(self, commit: str) -> int | None:
+        if commit not in self._commit_distance:
+            self._commit_distance[commit] = gitinfo.commits_since(self.project.root_path, commit)
+        return self._commit_distance[commit]
+
+    def _entry(
+        self, entry: Entry, content: str | None, cut: bool, links: list[str] | None = None
+    ) -> ContextEntry:
+        item = _context_entry(entry, content, cut, links)
+        stamp = gitinfo.valid_stamp((entry.meta or {}).get("git"))
+        if stamp and self._check_git:
+            item.commits_since = self._commits_since(stamp["commit"])
+            threshold = self.options.old_record_commits
+            item.outdated = bool(
+                threshold and item.commits_since is not None and item.commits_since >= threshold
+            )
+        return item
 
     # ------------------------------------------------------------- queries
     def _query(
@@ -469,7 +504,7 @@ class ContextBuilder:
                     )
                     content = content or None
                     cut = cut or (content is None)
-                item = _context_entry(entry, content, cut, self._links(entry))
+                item = self._entry(entry, content, cut, self._links(entry))
                 rendered = _render_entry(item)
                 cost = estimate_tokens(rendered) + 2
                 spent += cost
@@ -520,7 +555,7 @@ class ContextBuilder:
             # renders them as one line each (see ``_stale_line``).
             plan.section.text = intro
             for index, entry in enumerate(items):
-                item = _context_entry(entry, None, bool(entry.content.strip()))
+                item = self._entry(entry, None, bool(entry.content.strip()))
                 cost = estimate_tokens(self._stale_line(item)) + 1
                 if spent + cost > min(allowance, budget.remaining):
                     plan.section.omitted_entries = len(items) - index
@@ -683,6 +718,12 @@ class ContextBuilder:
         while estimate_tokens(markdown) > self.max_tokens and self._drop_one(plans):
             budget.truncated = True
             markdown = self._render(header, sections, pagination)
+        self._cut_summary = self._summary_cut(sections)
+        if self._cut_summary:
+            header = self._header()
+            markdown = self._render(header, sections, pagination)
+            while estimate_tokens(markdown) > self.max_tokens and self._drop_one(plans):
+                markdown = self._render(header, sections, pagination)
         return ContextResult(
             project=projects_core.to_out(self.project, self._entry_count),
             mode=self.mode,
@@ -697,6 +738,33 @@ class ContextBuilder:
             sections=[s for s in sections if s.text or s.entries or s.omitted_entries],
             pagination=pagination,
             markdown=markdown,
+        )
+
+    def _summary_cut(self, sections: list[ContextSection]) -> list[dict[str, Any]]:
+        """Summary sections this context could not show in full (not for ``full`` mode)."""
+        if self.mode == "full":
+            return []
+        cut = []
+        for section in sections:
+            if section.key not in summaries_core.SECTION_TITLES:
+                continue
+            value = getattr(self.summary, section.key) or ""
+            if value.strip() and (section.text_truncated or not section.text):
+                cut.append(
+                    {
+                        "section": section.key,
+                        "title": section.title,
+                        "tokens": estimate_tokens(value),
+                        "shown_tokens": estimate_tokens(section.text or ""),
+                    }
+                )
+        return cut
+
+    def _cut_summary_line(self) -> str:
+        names = ", ".join(f"{c['title']} (~{c['tokens']} tokens)" for c in self._cut_summary)
+        return (
+            f"- Summary sections cut off by the {self.mode} budget: {names}. When you next update the "
+            "summary, condense them: keep what is still true and move history into records."
         )
 
     @staticmethod
@@ -730,6 +798,7 @@ class ContextBuilder:
             "stale_issue_days": self.options.stale_issue_days,
             "records_since_summary": self._records_since_summary,
             "summary_commits_behind": self._summary_commits_behind,
+            "summary_sections_cut": self._cut_summary,
         }
 
     def _header(self) -> str:
@@ -769,6 +838,8 @@ class ContextBuilder:
             drift = self._drift_line()
             if drift:
                 lines.append(drift)
+            if self._cut_summary:
+                lines.append(self._cut_summary_line())
         lines += ["", GUIDANCE]
         return "\n".join(lines)
 

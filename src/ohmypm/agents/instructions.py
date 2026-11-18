@@ -1,6 +1,6 @@
 """Default global agent instructions (installed to ~/.config/ohmypm/agent-instructions.md)."""
 
-TEMPLATE_VERSION = 4
+TEMPLATE_VERSION = 5
 
 DEFAULT_INSTRUCTIONS = """\
 # ohmypm — project memory
@@ -16,7 +16,10 @@ id explicitly). If `ohmypm` is missing or fails, continue your work without it.
 2. If `"registered": true`, run `ohmypm context` and read it before starting.
    For more: `ohmypm context --mode standard`, `ohmypm search "<terms>"`,
    `ohmypm log show <number>`. Note which open issues (including the
-   "Stale Open Issues" list) relate to your task.
+   "Stale Open Issues" list) relate to your task. Records marked
+   "(N commits ago)" were written long before the current code: verify them.
+   If the header says the summary is behind or that sections are cut off,
+   fix that when you update the summary.
 3. If the directory is not registered, work normally. Do not register
    projects yourself unless the user asks (`ohmypm register`).
 
@@ -53,9 +56,11 @@ EOF
 | `note`      | other context worth keeping                                                                 |
 
 - `--author` is your lowercase client name: `claude-code`, `codex`, `pi`, `dsh` or `agy`.
-- Update instead of duplicating: if a record already covers the topic (check the
-  context index or `ohmypm search`), add to it with
-  `ohmypm log edit <number> --append --content "..."` rather than adding a near-copy.
+- Update instead of duplicating: before adding a record, especially an issue, run
+  `ohmypm log similar --title "<title>"` (`-T issue` for issues; or check the
+  context index and `ohmypm search`). If a record already covers the topic, add to
+  it with `ohmypm log edit <number> --append --content "..."` rather than adding a
+  near-copy.
 - Tag records by subsystem, device or version (`--tag lvgl`, `--tag device:<id>`;
   lowercase, no spaces). Reuse the tags listed in the context header.
 - Link records: `--fixes <N>` marks issue N resolved, `--supersedes <N>` marks an
@@ -103,6 +108,9 @@ intermediate states, or secrets of any kind (passwords, tokens, keys, credential
    `ohmypm summary show`, revise, then `ohmypm summary set --stdin`
    (sections: Overview, Architecture, Current State, Important Decisions,
    Known Issues, Next Steps; only the sections you include are changed).
+   Keep each section short and current - it describes the state, not the
+   history; details belong in records. `summary set` reports sections that
+   `ohmypm context` would cut off.
 
 Keep records accurate, concise and in the user's language. Recording must not
 disrupt the actual work: a few good records per session beat many small ones.

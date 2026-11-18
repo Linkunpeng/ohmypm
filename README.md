@@ -50,6 +50,7 @@ ohmypm search "链接失败"            # 全文检索，支持中文
 
 ohmypm log add -T milestone -t "修复链接顺序" --fixes 2 --tag opencv -c "…"   # 关联并关闭 #2
 ohmypm log list --tag opencv        # 按标签过滤；正文中的 #N 自动关联
+ohmypm log similar -t "OpenCV 链接报错" -T issue   # 新建前先查相似记录，命中则追加而不是重复
 ```
 
 记录类型：`note`、`milestone`、`issue`（默认状态 open）、`decision`、`knowledge`、`artifact`；可在 `config.toml` 中扩展。所有命令支持 `--json`，错误输出到 stderr 并使用明确的退出码。完整命令见 [docs/cli.md](docs/cli.md)。

@@ -5,11 +5,14 @@ import type {
   Entry,
   EntryRevision,
   EntryStatus,
+  LinkInput,
   Meta,
   Page,
   Project,
   SearchHit,
+  SimilarEntry,
   Summary,
+  SummaryCut,
   SummarySection,
   TagCount,
 } from "./types";
@@ -110,8 +113,15 @@ export const api = {
     request<Entry>("POST", "/api/entries", { body: { project_id: projectId, ...input } }),
   updateEntry: (
     id: string,
-    changes: Partial<EntryInput> & { clear_status?: boolean; expected_revision?: number },
+    changes: Partial<EntryInput> & {
+      clear_status?: boolean;
+      expected_revision?: number;
+      add_links?: LinkInput[];
+      remove_links?: string[];
+    },
   ) => request<{ changed: boolean; entry: Entry }>("PATCH", `/api/entries/${id}`, { body: changes }),
+  similar: (id: string, options: { type?: string[]; status?: string[]; limit?: number; min_score?: number } = {}) =>
+    request<SimilarEntry[]>("GET", `/api/entries/${id}/similar`, { query: { ...options } }),
   deleteEntry: (id: string) => request<{ deleted: boolean }>("DELETE", `/api/entries/${id}`),
   revisions: (id: string) => request<EntryRevision[]>("GET", `/api/entries/${id}/revisions`),
   restoreRevision: (id: string, revision: number) =>
@@ -124,7 +134,7 @@ export const api = {
     expectedRevision?: number,
     author?: string | null,
   ) =>
-    request<{ changed: boolean; summary: Summary }>("PUT", `/api/projects/${projectId}/summary`, {
+    request<{ changed: boolean; summary: Summary; summary_sections_cut: SummaryCut[] }>("PUT", `/api/projects/${projectId}/summary`, {
       body: { ...sections, expected_revision: expectedRevision, author: author ?? undefined },
     }),
   tags: (projectId: string) => request<TagCount[]>("GET", `/api/projects/${projectId}/tags`),

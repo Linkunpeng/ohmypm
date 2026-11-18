@@ -62,12 +62,13 @@ args = ["mcp"]
 | `pm_get_project` | 项目详情 | `project` / `workspace_path` |
 | `pm_get_context` | 确定性的项目上下文 | `mode`=brief/standard/full、`max_tokens`（默认取项目设置）、`page`、`page_size`、`output`=markdown/json、`tag` |
 | `pm_get_summary` | 摘要（各小节 + 等价 Markdown） | |
-| `pm_update_summary` | 更新摘要（只改提供的小节；`replace` 清空其他） | `markdown` 或 `overview`…`next_steps`、`author` |
+| `pm_update_summary` | 更新摘要（只改提供的小节；`replace` 清空其他）。若有小节会被默认上下文截断，返回 `summary_sections_cut` 和 `hint` | `markdown` 或 `overview`…`next_steps`、`author` |
 | `pm_add_entry` | 新增记录 | `title`（必填）、`type`、`content`、`status`、`author`、`metadata`、`tags`、`links`（`[{"target": "#12", "kind": "fixes"}]`，kind 为 relates/fixes/supersedes） |
 | `pm_list_entries` | 列出记录（默认最新在前，带摘录） | `types`、`statuses`、`query`、`since`、`until`、`tags`、`order`、`limit`、`offset`、`include_content` |
 | `pm_get_entry` | 单条记录全文 | `entry`（序号或 id） |
 | `pm_update_entry` | 编辑记录（保留修订） | `title`、`type`、`content` 或 `append_content`、`status`、`metadata`（合并）、`add_tags`、`remove_tags`、`add_links`、`remove_links` |
 | `pm_search` | 全文检索 | `query`、`all_projects`、`types`、`tags`、`kinds`、`limit` |
+| `pm_find_similar` | 相似或相关的记录（标题、正文、标签；确定性）。新建 issue 前先查，命中则追加到已有记录 | `title`（草稿）、`content`、`tags` 或 `entry`（与已有记录比较）、`types`、`statuses`、`limit`、`min_score`（默认 0.25） |
 | `pm_register_asset` | 保存图片/文本附件，返回 Markdown 引用 | `file_path`（绝对路径）或 `content_base64` + `filename`、`entry` |
 
 MCP 写入的记录 `source` 为 `mcp`。`pm_get_entry` 以及新增、编辑返回的记录带有 `links`（指向其他记录）和 `backlinks`（被其他记录指向）；列表结果中这两项为 `null`。标签、关联和作者名规则见 [cli.md](cli.md#标签与关联)。删除记录、取消注册等破坏性操作不通过 MCP 提供，请使用 CLI 或 Web。

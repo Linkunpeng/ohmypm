@@ -267,6 +267,25 @@ class EntryOut(_Model):
     backlinks: list[LinkOut] | None = None
 
 
+class SimilarEntry(_Model):
+    """A record similar to a given record or draft, with the parts of its score."""
+
+    entry_id: str
+    sequence: int
+    type: str
+    title: str
+    status: str | None
+    created_at: datetime
+    updated_at: datetime
+    tags: list[str] = []
+    score: float
+    title_score: float
+    body_score: float | None
+    shared_tags: list[str] = []
+    # Already linked to the source record (either direction, mentions included).
+    linked: bool = False
+
+
 class EntryRevisionOut(_Model):
     id: str
     entry_id: str

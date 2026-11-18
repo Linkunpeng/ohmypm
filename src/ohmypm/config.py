@@ -22,6 +22,7 @@ DEFAULT_WEB_HOST = "127.0.0.1"
 DEFAULT_WEB_PORT = 8737
 DEFAULT_MAX_UPLOAD_MB = 20
 DEFAULT_STALE_ISSUE_DAYS = 7
+DEFAULT_OLD_RECORD_COMMITS = 20
 CONTEXT_TOKEN_KEYS = ("brief_tokens", "standard_tokens", "full_tokens")
 # Author names are stored lowercase; these spellings map to the client names
 # used in the agent instructions. Extend with [ohmypm] author_aliases.
@@ -84,6 +85,7 @@ class Settings:
     # Context defaults from ``[context]``; project settings override them.
     context_tokens: dict[str, int] = field(default_factory=dict)
     stale_issue_days: int = DEFAULT_STALE_ISSUE_DAYS
+    old_record_commits: int = DEFAULT_OLD_RECORD_COMMITS
     # ``[git] stamps``: record the project's HEAD commit on new records and
     # summary updates, and report in the context how far the summary is behind.
     git_stamps: bool = True
@@ -159,6 +161,7 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
             if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
                 aliases[" ".join(key.split()).lower()] = " ".join(value.split()).lower()
     stale_days = context.get("stale_issue_days", DEFAULT_STALE_ISSUE_DAYS)
+    old_commits = context.get("old_record_commits", DEFAULT_OLD_RECORD_COMMITS)
 
     return Settings(
         data_dir=data_dir,
@@ -181,6 +184,9 @@ def load_settings(data_dir: Path | None = None, config_dir: Path | None = None) 
         stale_issue_days=stale_days
         if isinstance(stale_days, int) and not isinstance(stale_days, bool) and stale_days >= 0
         else DEFAULT_STALE_ISSUE_DAYS,
+        old_record_commits=old_commits
+        if isinstance(old_commits, int) and not isinstance(old_commits, bool) and old_commits >= 0
+        else DEFAULT_OLD_RECORD_COMMITS,
         git_stamps=git.get("stamps") is not False,
         raw_config=raw,
     )

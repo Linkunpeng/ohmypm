@@ -40,10 +40,17 @@ function SectionEditor({
   const [notice, setNotice] = useState<string | null>(null);
   const save = useMutation({
     mutationFn: () => api.saveSummary(projectId, { [section]: value }, summary.revision, author),
-    onSuccess: ({ summary: updated, changed }) => {
+    onSuccess: ({ summary: updated, changed, summary_sections_cut: cut }) => {
       client.setQueryData(queryKeys.summary(projectId), updated);
       void client.invalidateQueries({ queryKey: queryKeys.dashboard });
       toast.success(changed ? `${SECTION_INFO[section].title} saved` : "No changes");
+      if (cut?.length) {
+        toast.warning(
+          `Agents' default context cuts off ${cut.map((c) => `${c.title} (~${c.tokens} tokens)`).join(", ")}. ` +
+            "Consider condensing: keep what is still true, move history into records.",
+          { duration: 10000 },
+        );
+      }
       onDone();
     },
     onError: (err) =>

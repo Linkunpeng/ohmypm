@@ -250,3 +250,57 @@ def test_context_settings_precedence(
     for bad in ({"brief_tokens": 100}, {"stale_issue_days": -1}, {"bogus": 1}):
         with pytest.raises(ValidationError):
             configured.update_context_settings(bad, project=project_id)
+
+
+def test_summary_sections_cut_by_the_brief_budget(service: MemoryService, project_id: str) -> None:
+    service.set_summary(SummaryUpdate(overview="短概述", current_state="- 状态\n" * 2000), project=project_id)
+    ctx = service.context(project=project_id)
+    cut = ctx.stats["summary_sections_cut"]
+    assert [c["section"] for c in cut] == ["current_state"]
+    assert cut[0]["tokens"] > cut[0]["shown_tokens"] > 0
+    assert "- Summary sections cut off by the brief budget: Current State (~" in ctx.markdown
+    assert ctx.budget.used_tokens <= ctx.budget.max_tokens
+    # A larger budget shows it in full; full mode never reports cuts.
+    assert service.context(project=project_id, max_tokens=20000).stats["summary_sections_cut"] == []
+    assert service.context(project=project_id, mode="full").stats["summary_sections_cut"] == []
+    assert service.summary_cut(project=project_id) == cut
+
+    service.set_summary(SummaryUpdate(current_state="- 状态"), project=project_id)
+    ctx = service.context(project=project_id)
+    assert ctx.stats["summary_sections_cut"] == [] and "cut off" not in ctx.markdown
+
+
+def test_summary_writers_report_cut_sections(
+    service: MemoryService, project_id: str, workspace: Path
+) -> None:
+    from typer.testing import CliRunner
+
+    from ohmypm.cli.common import reset_service
+    from ohmypm.cli.main import app
+    from tests.test_mcp import ok
+
+    long_state = "- 状态\n" * 2000
+    reset_service()
+    result = CliRunner().invoke(
+        app,
+        ["summary", "set", "--cwd", str(workspace), "--section", "Current State", "--content", long_state],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Note: `ohmypm context` cuts off Current State" in result.output
+
+    got = ok(service, "pm_update_summary", project=project_id, next_steps="- 下一步")
+    assert got["summary_sections_cut"][0]["section"] == "current_state" and "Condense" in got["hint"]
+    got = ok(service, "pm_update_summary", project=project_id, current_state="- 简短状态")
+    assert "summary_sections_cut" not in got
+
+
+def test_old_record_commits_setting(service: MemoryService, project_id: str, settings) -> None:
+    assert service.context_settings(project=project_id).old_record_commits == 20
+    settings.config_dir.mkdir(parents=True, exist_ok=True)
+    settings.config_file.write_text("[context]\nold_record_commits = 50\n")
+    configured = MemoryService(load_settings(), service.db)
+    assert configured.context_settings(project=project_id).old_record_commits == 50
+    opts = configured.update_context_settings({"old_record_commits": 5}, project=project_id)
+    assert opts.old_record_commits == 5 and opts.project_overrides == {"old_record_commits": 5}
+    with pytest.raises(ValidationError):
+        configured.update_context_settings({"old_record_commits": -1}, project=project_id)

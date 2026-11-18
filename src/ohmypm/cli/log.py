@@ -27,6 +27,7 @@ from ohmypm.core.errors import ValidationError
 from ohmypm.core.gitinfo import label as git_label
 from ohmypm.core.gitinfo import valid_stamp
 from ohmypm.core.schemas import BUILTIN_ENTRY_TYPES, EntryCreate, EntryOut, EntryUpdate, LinkIn
+from ohmypm.core.similar import DEFAULT_MIN_SCORE
 
 log_app = typer.Typer(
     help="Development records (entries): add, list, show, edit, delete.", no_args_is_help=True
@@ -231,6 +232,71 @@ def log_list(
         out(entry_line(e, project_name=names.get(e.project_id)))
     if page.total > len(items):
         out(f"({len(items)} of {page.total} shown; use --limit/--offset)")
+
+
+@log_app.command("similar")
+def log_similar(
+    ref: Annotated[
+        str | None, typer.Argument(help="Compare with this entry (12, #12 or id). Omit to check a draft.")
+    ] = None,
+    title: Annotated[str | None, typer.Option("--title", "-t", help="Draft title to compare.")] = None,
+    content: ContentOpt = None,
+    file: FileOpt = None,
+    stdin: StdinOpt = False,
+    tag: TagOpt = None,
+    type_: Annotated[
+        list[str] | None, typer.Option("--type", "-T", help="Only compare with these types. Repeatable.")
+    ] = None,
+    status: Annotated[
+        list[str] | None, typer.Option("--status", "-s", help="Only compare with these statuses. Repeatable.")
+    ] = None,
+    include_obsolete: Annotated[
+        bool, typer.Option("--include-obsolete", help="Also compare with obsolete entries.")
+    ] = False,
+    limit: Annotated[int, typer.Option("--limit", "-n", help="Maximum number of results.")] = 5,
+    min_score: Annotated[
+        float, typer.Option("--min-score", help="Minimum similarity, 0-1 (default 0.25).")
+    ] = DEFAULT_MIN_SCORE,
+    project: ProjectOpt = None,
+    cwd: CwdOpt = None,
+    json_: JsonOpt = False,
+) -> None:
+    """Find similar or related records, e.g. before opening an issue.
+
+    Compares titles, bodies and tags of the project's records (deterministic,
+    no AI). Check a draft with --title (and optionally --content / --tag), or
+    an existing entry by its number. Extend a matching record instead of
+    adding a near-duplicate.
+    """
+    body = read_text_input(content, file, stdin)
+    hits = get_service().similar_entries(
+        ref,
+        title=title,
+        content=body,
+        tags=tag,
+        types=type_,
+        statuses=status,
+        include_obsolete=include_obsolete,
+        limit=limit,
+        min_score=min_score,
+        **_scope(project, cwd),
+    )
+    if json_:
+        emit_json({"items": hits})
+        return
+    if not hits:
+        out("No similar records.")
+        return
+    for h in hits:
+        kind = h.type + (f"/{h.status}" if h.status else "")
+        notes = [f"title {h.title_score:.2f}"]
+        if h.body_score is not None:
+            notes.append(f"body {h.body_score:.2f}")
+        if h.shared_tags:
+            notes.append("tags " + ", ".join(h.shared_tags))
+        if h.linked:
+            notes.append("already linked")
+        out(f"{h.score:.2f}  #{h.sequence:<4} [{kind}]  {h.title}  ({'; '.join(notes)})")
 
 
 @log_app.command("show")

@@ -43,7 +43,8 @@
 | `PATCH /api/projects/{id}` | `{"name?","description?","root_path?"}`（`root_path` 即 relink） |
 | `DELETE /api/projects/{id}?purge=false` | 取消注册（保留数据）；`purge=true` 永久删除 |
 | `GET /api/projects/{id}/summary` | 摘要 |
-| `PUT /api/projects/{id}/summary` | `{"overview?",…,"replace?","expected_revision?","author?"}` |
+| `PUT /api/projects/{id}/summary` | `{"overview?",…,"replace?","expected_revision?","author?"}`；返回 `{"changed","summary","summary_sections_cut"}`，后者列出默认上下文会截断的小节 |
+| `POST /api/projects/{id}/similar` | 与草稿相似的记录：`{"title?","content?","tags?","types?","statuses?","limit?","min_score?"}` |
 | `GET /api/projects/{id}/summary/history` | 摘要修订 |
 | `GET /api/projects/{id}/context?mode=&max_tokens=&page=&page_size=&tag=` | ContextBuilder 结果（含 `markdown`） |
 | `GET /api/projects/{id}/tags` | 使用中的标签及记录数：`[{"tag","count"}]` |
@@ -52,6 +53,7 @@
 | `GET /api/entries/{id}` | 单条记录（含全文、`tags`、`links`、`backlinks`） |
 | `PATCH /api/entries/{id}` | `{"title?","type?","content?","status?","clear_status?","metadata?","tags?","add_tags?","remove_tags?","add_links?","remove_links?","expected_revision?","author?"}` |
 | `DELETE /api/entries/{id}` | 删除（保留可恢复的快照） |
+| `GET /api/entries/{id}/similar?type=&status=&limit=&min_score=` | 与该记录相似或相关的记录（含 `score`、`title_score`、`body_score`、`shared_tags`、`linked`） |
 | `GET /api/entries/{id}/revisions` | 修订列表 |
 | `POST /api/entries/{id}/restore` | `{"revision"}` |
 | `GET /api/search?q=&project_id=&kind=&type=&tag=&since=&until=&limit=&offset=` | 全文检索 |
@@ -75,9 +77,9 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
 |---|---|
 | 总览 `/` | 最近记录、最近活跃的项目、按类型的记录数、最近更新的摘要 |
 | 项目 `/projects/:id` | 名称、目录、简介（可编辑）、摘要（当前状态与下一步）、时间线（序号、时间、类型、状态、作者、标签、摘录、图片缩略图），按类型/标签/状态/关键词/日期筛选，正序/倒序 |
-| 记录 `/projects/:id/entries/:entryId` | 完整 Markdown 渲染（GFM 表格与任务列表、代码高亮、Mermaid、KaTeX、图片放大）、元数据、标签、关联记录（修复 / 取代 / 相关 / 提及，双向）、附件、修订历史与恢复、标记已解决、删除 |
+| 记录 `/projects/:id/entries/:entryId` | 完整 Markdown 渲染（GFM 表格与任务列表、代码高亮、Mermaid、KaTeX、图片放大）、元数据、标签、关联记录（修复 / 取代 / 相关 / 提及，双向；可添加和删除显式关联）、相似记录（可一键关联为相关）、附件、修订历史与恢复、标记已解决、删除 |
 | 编辑 `…/edit`、`…/entries/new` | 标题、类型、状态、标签（可补全已有标签；正文中的 `#N` 自动关联）；富文本（MDXEditor）与 Markdown 源码 + 实时预览两种模式；图片可拖拽、粘贴或选择上传；按类型提供模板；离开页面前提示未保存修改；并发修改检测 |
-| 摘要 `/projects/:id/summary` | 六个小节分别阅读与编辑 |
+| 摘要 `/projects/:id/summary` | 六个小节分别阅读与编辑；保存后若有小节会被默认上下文截断则提示精简 |
 | Agent 上下文 `/projects/:id/context` | 预览 `ohmypm context` 的输出，可复制 |
 | 搜索 `/search` | 全部或单个项目、按对象类型筛选，高亮命中词 |
 

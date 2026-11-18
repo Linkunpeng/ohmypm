@@ -1,6 +1,6 @@
 # 开发计划与进度
 
-供后续开发者 / Agent 接力使用。最后更新：2026-11-04（v0.1.0）。
+供后续开发者 / Agent 接力使用。最后更新：2026-11-18（v0.1.0，Schema `0003_summary_git`）。
 
 ## 阶段状态
 
@@ -8,9 +8,10 @@
 |---|---|---|---|
 | 1 Python Core | 工程、SQLite（WAL / BEGIN IMMEDIATE）、Alembic、Project / Entry / Summary、修订、附件、FTS5 | 完成 | pytest |
 | 2 CLI 与 Context | Typer CLI、自动识别、JSON、退出码、ContextBuilder、搜索 | 完成 | pytest（CliRunner + 子进程） |
-| 3 MCP 与 Agent | MCPServer stdio 12 个工具、全局指令管理（Claude Code / Codex / Pi / DSH） | 完成 | pytest；`scripts/verify_agents.py` 对四个 Agent 实测通过 |
+| 3 MCP 与 Agent | MCPServer stdio 13 个工具、全局指令管理（Claude Code / Codex / Pi / DSH） | 完成 | pytest；`scripts/verify_agents.py` 对四个 Agent 实测通过 |
 | 4 Web 与富文本 | FastAPI + 安全中间件；React UI（总览、时间线、详情、编辑器、摘要、搜索、上下文预览） | 完成 | pytest、vitest、Playwright（`frontend/scripts/e2e-web.mjs`） |
 | 5 交付 | 备份 / 恢复 / Markdown 导出、文档、构建脚本、验收脚本 | 完成 | `scripts/acceptance.py --web`：23 项检查 + 8 个浏览器步骤通过 |
+| 6 记忆质量（11-18） | 久未更新 issue 折叠与项目级 context 设置；标签、记录关联与作者名规范化；Git 提交标记与摘要落后提示；旧记录标记；摘要截断提示；相似记录（`log similar` / `pm_find_similar`）；Web 编辑关联；`doctor` 检测运行旧代码的进程；Agent 指令模板 v5 | 完成 | pytest、vitest |
 
 ## 关键决策
 
@@ -31,7 +32,6 @@
 - 前端主包约 1.2 MB（gzip 约 360 KB），编辑器与 Mermaid 已按需加载。
 - 搜索结果的排序只对 ≥3 字符的词使用 bm25；纯短词查询按时间排序。
 - 尚未实现：多设备同步（按设计不做）、附件以外的二进制格式（PDF 等）。
-- Web UI 可以编辑标签，但显式关联（fixes / supersedes / relates）只能通过 CLI / MCP 建立；Web 正文中的 `#N` 会自动关联。
 
 ## 交接提示
 

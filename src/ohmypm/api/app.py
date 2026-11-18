@@ -31,10 +31,12 @@ from ohmypm.core.schemas import (
     Page,
     ProjectOut,
     SearchHit,
+    SimilarEntry,
     SummaryOut,
     SummaryUpdate,
 )
 from ohmypm.core.service import MemoryService
+from ohmypm.core.similar import DEFAULT_MIN_SCORE
 from ohmypm.storage.database import SCHEMA_HEAD
 from ohmypm.storage.files import safe_child
 
@@ -72,6 +74,19 @@ class SummaryPutBody(SummaryUpdate):
     replace: bool = False
     expected_revision: int | None = None
     author: str | None = None
+
+
+class SimilarBody(BaseModel):
+    """A draft to compare with the project's records."""
+
+    model_config = ConfigDict(extra="forbid")
+    title: str = ""
+    content: str = ""
+    tags: list[str] = []
+    types: list[str] | None = None
+    statuses: list[str] | None = None
+    limit: int = 5
+    min_score: float = DEFAULT_MIN_SCORE
 
 
 class RestoreBody(BaseModel):
@@ -206,7 +221,11 @@ def create_app(
             changed_by=body.author,
             expected_revision=body.expected_revision,
         )
-        return {"changed": changed, "summary": summary.model_dump(mode="json")}
+        return {
+            "changed": changed,
+            "summary": summary.model_dump(mode="json"),
+            "summary_sections_cut": service.summary_cut(project=project_id),
+        }
 
     @app.get("/api/projects/{project_id}/summary/history", tags=["summary"])
     def summary_history(project_id: str) -> list[dict[str, Any]]:
@@ -285,6 +304,31 @@ def create_app(
     def delete_entry(entry_id: str, author: str | None = None) -> dict[str, Any]:
         entry = service.delete_entry(entry_id, changed_by=author)
         return {"deleted": True, "entry": entry.model_dump(mode="json")}
+
+    @app.get("/api/entries/{entry_id}/similar", tags=["entries"])
+    def similar_to_entry(
+        entry_id: str,
+        types: Annotated[list[str] | None, Query(alias="type")] = None,
+        statuses: Annotated[list[str] | None, Query(alias="status")] = None,
+        limit: int = 5,
+        min_score: float = DEFAULT_MIN_SCORE,
+    ) -> list[SimilarEntry]:
+        return service.similar_entries(
+            entry_id, types=types, statuses=statuses, limit=limit, min_score=min_score
+        )
+
+    @app.post("/api/projects/{project_id}/similar", tags=["entries"])
+    def similar_to_draft(project_id: str, body: SimilarBody) -> list[SimilarEntry]:
+        return service.similar_entries(
+            title=body.title,
+            content=body.content,
+            tags=body.tags,
+            project=project_id,
+            types=body.types,
+            statuses=body.statuses,
+            limit=body.limit,
+            min_score=body.min_score,
+        )
 
     @app.get("/api/entries/{entry_id}/revisions", tags=["entries"])
     def entry_revisions(entry_id: str) -> list[EntryRevisionOut]:

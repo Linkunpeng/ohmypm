@@ -240,12 +240,19 @@ def project_settings(
             help="Open issues not updated for this many days are listed as stale (0 disables).",
         ),
     ] = None,
+    old_commits: Annotated[
+        int | None,
+        typer.Option(
+            "--old-commits",
+            help="Records written this many commits before HEAD are flagged in the context (0 disables).",
+        ),
+    ] = None,
     reset: Annotated[bool, typer.Option("--reset", help="Remove all project overrides first.")] = False,
     project: ProjectOpt = None,
     cwd: CwdOpt = None,
     json_: JsonOpt = False,
 ) -> None:
-    """Show or change the project's context settings (token budgets, stale-issue threshold).
+    """Show or change the project's context settings (token budgets, stale-issue and old-record thresholds).
 
     Project values override `[context]` in config.toml. Without options the
     effective settings are shown.
@@ -260,6 +267,8 @@ def project_settings(
             values[key] = value or None
     if stale_days is not None:
         values["stale_issue_days"] = stale_days
+    if old_commits is not None:
+        values["old_record_commits"] = old_commits
     service = get_service()
     scope = {"project": project, "path": None if project else workspace(cwd)}
     if values or reset:
@@ -277,3 +286,8 @@ def project_settings(
         out(f"{mode + ' tokens:':<17}{tokens}{origin(f'{mode}_tokens')}")
     days = options.stale_issue_days
     out(f"{'stale issues:':<17}{f'after {days} days' if days else 'disabled'}{origin('stale_issue_days')}")
+    commits = options.old_record_commits
+    out(
+        f"{'old records:':<17}{f'after {commits} commits' if commits else 'disabled'}"
+        f"{origin('old_record_commits')}"
+    )

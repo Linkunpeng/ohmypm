@@ -27,6 +27,7 @@ EXPECTED_TOOLS = {
     "pm_get_entry",
     "pm_update_entry",
     "pm_search",
+    "pm_find_similar",
     "pm_register_asset",
 }
 

@@ -194,3 +194,24 @@ def test_cli_shows_stamps(repo: Path, pid: str) -> None:
     result = runner.invoke(app, ["status", "--cwd", str(repo)])
     assert f"at {head}" in result.output
     assert "since then: 1 commit(s)" in result.output
+
+
+def test_context_flags_records_written_many_commits_ago(service: MemoryService, repo: Path, pid: str) -> None:
+    first = _git(repo, "rev-parse", "HEAD")
+    service.add_entry(EntryCreate(type="knowledge", title="Build with make", content="make all"), project=pid)
+    for n in range(3):
+        commit(repo, f"change {n}")
+    recent = service.add_entry(EntryCreate(type="milestone", title="Recent work"), project=pid)
+
+    service.update_context_settings({"old_record_commits": 3}, project=pid)
+    ctx = service.context(project=pid)
+    entries = {e.sequence: e for s in ctx.sections for e in s.entries}
+    assert entries[1].commits_since == 3 and entries[1].outdated
+    assert entries[recent.sequence].commits_since == 0 and not entries[recent.sequence].outdated
+    assert f"at {first[:7]} (3 commits ago)" in ctx.markdown
+
+    service.update_context_settings({"old_record_commits": 4}, project=pid)
+    ctx = service.context(project=pid)
+    assert "commits ago" not in ctx.markdown
+    service.update_context_settings({"old_record_commits": 0}, project=pid)  # disabled
+    assert "commits ago" not in service.context(project=pid).markdown

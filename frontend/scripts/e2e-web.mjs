@@ -131,6 +131,8 @@ await step("edit a summary section", async () => {
   await page.getByRole("radio", { name: "Markdown" }).click();
   await page.getByLabel("Markdown source").fill("1. 完成标定\n2. Web 验收通过");
   await page.getByRole("button", { name: "Save section" }).click();
+  // Wait for the save to finish (the toast), not for text that is already in the editor.
+  await page.getByText("Next steps saved").waitFor();
   await page.waitForSelector("text=Web 验收通过");
   const summary = await getJson(`/api/projects/${robot.id}/summary`);
   assert.equal(summary.next_steps, "1. 完成标定\n2. Web 验收通过");
@@ -143,6 +145,33 @@ await step("filter the timeline and search", async () => {
   assert.equal(await page.locator("section[aria-labelledby=timeline-heading] ol > li").count(), 1);
   await page.goto(`${base}/search?q=${encodeURIComponent("验收")}`);
   await page.waitForSelector("mark");
+});
+
+await step("similar records, and adding and removing links on the record page", async () => {
+  const opencv = (await getJson(`/api/entries?project_id=${robot.id}&type=issue`)).items.find((e) => e.title.startsWith("OpenCV"));
+  const dup = await (
+    await page.request.post(`${base}/api/entries`, {
+      data: { project_id: robot.id, type: "issue", title: "OpenCV 链接失败：undefined reference", content: "链接 libtiff 时失败" },
+    })
+  ).json();
+  await page.goto(`${base}/projects/${robot.id}/entries/${dup.id}`);
+  const similar = page.locator("section[aria-labelledby=similar]");
+  await similar.getByText(opencv.title).waitFor();
+  await similar.getByRole("button", { name: `Link #${opencv.sequence} as related` }).click();
+  await page.locator("section[aria-labelledby=relations]").getByText("Related to").waitFor();
+  assert.deepEqual((await getJson(`/api/entries/${dup.id}`)).links.map((l) => [l.sequence, l.kind]), [[opencv.sequence, "relates"]]);
+  await similar.getByText("linked").waitFor();
+
+  await page.getByRole("button", { name: `Remove link to #${opencv.sequence}` }).click();
+  await page.getByText("No links yet").waitFor();
+  assert.deepEqual((await getJson(`/api/entries/${dup.id}`)).links, []);
+
+  await page.getByRole("button", { name: "Add a link" }).click();
+  await page.getByRole("combobox", { name: "Link kind" }).selectOption("supersedes");
+  await page.getByRole("textbox", { name: "Target record" }).fill(String(opencv.sequence));
+  await page.getByRole("button", { name: "Link", exact: true }).click();
+  await page.locator("section[aria-labelledby=relations]").getByText("Supersedes").waitFor();
+  assert.equal((await getJson(`/api/entries/${opencv.id}`)).status, "obsolete");
 });
 
 await step("delete a record with confirmation", async () => {

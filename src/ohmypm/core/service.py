@@ -23,6 +23,7 @@ from ohmypm.core import gitinfo
 from ohmypm.core import links as links_core
 from ohmypm.core import projects as projects_core
 from ohmypm.core import search as search_core
+from ohmypm.core import similar as similar_core
 from ohmypm.core import summaries as summaries_core
 from ohmypm.core.context import ContextOptions, ContextResult, build_context
 from ohmypm.core.errors import ValidationError
@@ -35,8 +36,10 @@ from ohmypm.core.schemas import (
     Page,
     ProjectOut,
     SearchHit,
+    SimilarEntry,
     SummaryOut,
     SummaryUpdate,
+    clean_tags,
 )
 from ohmypm.core.text import excerpt
 from ohmypm.storage.database import Database
@@ -331,6 +334,55 @@ class MemoryService:
             target = self._project(s, project, path)
             return [entries_core.revision_to_out(r) for r in entries_core.list_deleted(s, target)]
 
+    def similar_entries(
+        self,
+        ref: str | None = None,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        tags: list[str] | None = None,
+        project: str | None = None,
+        path: str | os.PathLike[str] | None = None,
+        types: list[str] | None = None,
+        statuses: list[str] | None = None,
+        include_obsolete: bool = False,
+        limit: int = 5,
+        min_score: float = similar_core.DEFAULT_MIN_SCORE,
+    ) -> list[SimilarEntry]:
+        """Records similar to entry ``ref`` or to a draft (title / content / tags).
+
+        Given values override the ones of ``ref``. Use it before adding an
+        issue to find one that should be extended instead.
+        """
+        if not 1 <= limit <= 100 or not 0 <= min_score <= 1:
+            raise ValidationError("limit must be 1-100 and min_score 0-1")
+        with self.db.read() as s:
+            target = self._project(s, project, path) if (project or path is not None) else None
+            source = entries_core.get_entry(s, ref, project=target) if ref else None
+            if source is not None:
+                target = source.project
+                title = source.title if title is None else title
+                content = source.content if content is None else content
+                tags = list(source.tags or []) if tags is None else tags
+            if target is None:
+                raise ValidationError("Specify a project (id or name) or a workspace path")
+            if not (title or "").strip() and not (content or "").strip():
+                raise ValidationError("Give a record or a title / content to compare")
+            matches = similar_core.find_similar(
+                s,
+                target,
+                title=title or "",
+                content=content or "",
+                tags=clean_tags(tags or []),
+                exclude=source,
+                types=types,
+                statuses=statuses,
+                include_obsolete=include_obsolete,
+                limit=limit,
+                min_score=min_score,
+            )
+            return [SimilarEntry.model_validate(similar_core.to_out(m)) for m in matches]
+
     def tags(
         self,
         *,
@@ -466,6 +518,12 @@ class MemoryService:
                 tag=tag,
                 check_git=self.settings.git_stamps,
             )
+
+    def summary_cut(
+        self, *, project: str | None = None, path: str | os.PathLike[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Summary sections that the default (brief) context cannot show in full."""
+        return self.context(project=project, path=path, mode="brief").stats["summary_sections_cut"]
 
     def context_settings(
         self, *, project: str | None = None, path: str | os.PathLike[str] | None = None
