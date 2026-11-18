@@ -8,6 +8,9 @@
 **`Error: The database schema (…) is newer than this ohmypm supports`（退出码 7）**
 数据库已被更新版本的 ohmypm 迁移过（例如装回了旧版本）。重新安装新版本即可；确实要使用旧版本时，用 `ohmypm restore` 恢复该版本时期的备份（每次安装新版本前建议先 `ohmypm backup`）。已经在运行的 MCP / Web 进程只在启动时检查 Schema，升级后请重启它们。
 
+**升级后 Agent 或 Web 仍是旧行为（例如没有 `pm_find_similar`、记录没有 Git 标记）**
+已经在运行的进程仍加载着旧代码。`ohmypm doctor` 的 `servers:` 一节会把它们标为 `OUTDATED` 并给出重启方式：Web 服务若由 systemd 运行，执行提示的 `systemctl --user restart …`；MCP 服务由 Agent 客户端启动，重启对应的 Agent 会话即可。
+
 **项目目录移动后找不到项目**
 `cd /new/path && ohmypm project relink /new/path --project <名称或 id>`。附件不受影响。
 

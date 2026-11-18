@@ -16,6 +16,7 @@ from ohmypm.cli.common import (
     ProjectOpt,
     confirm_or_fail,
     emit_json,
+    err,
     get_service,
     local_time,
     out,
@@ -189,6 +190,7 @@ def doctor(json_: JsonOpt = False) -> None:
     from ohmypm import __version__
     from ohmypm.agents.manager import AgentManager
     from ohmypm.api.static import web_dist_dir
+    from ohmypm.processes import server_processes
 
     service = get_service()
     settings = service.settings
@@ -205,6 +207,8 @@ def doctor(json_: JsonOpt = False) -> None:
         "projects": len(service.list_projects()),
         "agents": [s.model_dump(mode="json") for s in AgentManager(settings).status()],
     }
+    processes = server_processes()
+    checks["processes"] = [p.to_dict() for p in processes]
     if json_:
         emit_json(checks)
         return
@@ -224,6 +228,17 @@ def doctor(json_: JsonOpt = False) -> None:
     out("agents:")
     for a in checks["agents"]:
         out(f"  {a['agent']:<12} {a['state']:<14} {a['target'] or '-'}")
+    out("servers:" + ("" if processes else "          none running"))
+    for p in processes:
+        started = local_time(p.started_at)
+        if p.outdated:
+            state = f"OUTDATED (code updated {local_time(p.code_updated_at)}): {p.restart_hint()}"
+        else:
+            state = "current" if p.outdated is False else "unknown (package not found)"
+        out(f"  {p.pid:<8} {p.kind:<4} started {started}  {state}")
+    stale = sum(1 for p in processes if p.outdated)
+    if stale:
+        err(f"{stale} running ohmypm server(s) use outdated code; restart them to load this version.")
 
 
 def _has_trigram() -> bool:
